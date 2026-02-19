@@ -17,7 +17,7 @@
     "@types/three": "^0.183.0",
     "isbot": "^5.1.31",
     "lucide-react": "^0.574.0",
-    "pluto-rtc": "../Plutonium-src/pluto-rtc/ts",
+    "pluto-rtc": "^0.0.8",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router": "7.12.0",
