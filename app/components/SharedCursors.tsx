@@ -7,6 +7,7 @@ const ROOM_ID = 'demo';
 interface CursorPosition {
     x: number;
     y: number;
+    clientY: number;
     color: string;
 }
 
@@ -26,7 +27,7 @@ export function SharedCursors() {
     const myColor = useRef(getRandomColor());
     const connectionsRef = useRef<Connection[]>([]);
     const mountedRef = useRef(true);
-    const [myMousePosition, setMyMousePosition] = useState({ x: 0, y: 0 });
+    const [myMousePosition, setMyMousePosition] = useState({ x: 0, y: 0, clientY: 0 });
 
     useEffect(() => {
         mountedRef.current = true;
@@ -111,6 +112,7 @@ export function SharedCursors() {
         const payload = {
             x: (e.clientX + document.documentElement.scrollLeft) / document.body.clientWidth,
             y: (e.clientY + document.documentElement.scrollTop) / document.body.clientHeight,
+            clientY: e.clientY / window.innerHeight,
             color: myColor.current
         };
 
@@ -126,11 +128,10 @@ export function SharedCursors() {
 
     const handleScroll = (e: Event) => {
 
-        console.log("Scroll event detected, sending updated cursor position");
-
         const payload = {
             x: myLastClientX.current + (window.scrollX / document.body.clientWidth),
             y: myLastClientY.current + (window.scrollY / document.body.clientHeight),
+            clientY: myLastClientY.current / window.innerHeight,
             color: myColor.current
         };
 
@@ -192,7 +193,7 @@ export function SharedCursors() {
                 ))}
             </div>
 
-            <AsciiBackground positions={[...Object.values(cursors), myMousePosition].map(c => ({ x: c.x, y: c.y }))} />
+            <AsciiBackground positions={[...Object.values(cursors), myMousePosition].map(c => ({ x: c.x, y: c.clientY }))} />
         </>
     );
 }

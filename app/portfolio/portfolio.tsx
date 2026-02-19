@@ -1,3 +1,4 @@
+import React from "react";
 import type { Route } from "./+types/portfolio";
 
 export const meta: Route.MetaFunction = () => {
