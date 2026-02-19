@@ -147,8 +147,8 @@ export function SpaceDebris({ theme }: { theme?: string }) {
     const debris = useMemo(() => {
         const items: { position: [number, number, number], color: string, geometryType: 'box' | 'icosahedron' | 'octahedron' }[] = [];
 
-        const startPos = new THREE.Vector3(0.5, 7, 0.5);
-        const endPos = new THREE.Vector3(-0.1, 25, 25);
+        const startPos = new THREE.Vector3(0, 0, 0);
+        const endPos = new THREE.Vector3(-0.1, 15, 25);
         const direction = new THREE.Vector3().subVectors(endPos, startPos);
 
         // Colors from the palette

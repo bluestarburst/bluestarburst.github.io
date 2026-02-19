@@ -206,11 +206,8 @@ function CameraController({ scrollProgress }: { scrollProgress: number }) {
         // Birds-eye view at top: camera at [0, 0, 8] looking down
         // Isometric view when scrolled: camera at [0, 6, 6] looking at mesh
 
-        const startDistance = 10;
-        const endDistance = 25;
-
-        const startPos = new THREE.Vector3(0.5, startDistance, 0.5);
-        const endPos = new THREE.Vector3(-0.1, endDistance, endDistance);
+        const startPos = new THREE.Vector3(0.5, 10, 0.5);
+        const endPos = new THREE.Vector3(-0.1, 15, 25);
 
         const targetPosition = new THREE.Vector3().lerpVectors(startPos, endPos, scrollProgress);
 
