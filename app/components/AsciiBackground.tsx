@@ -1,6 +1,8 @@
 import { useRef, useMemo, useState, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Html } from "@react-three/drei";
 import * as THREE from "three";
+import { useTheme } from "./ThemeContext";
 
 type CursorData = {
     x: number;
@@ -73,11 +75,13 @@ const snoise = `
     }
 `;
 
-function TopographicMaterial({ positions }: { positions: CursorData[] }) {
+
+function TopographicMaterial({ positions, theme }: { positions: CursorData[], theme: string }) {
     const materialRef = useRef<THREE.ShaderMaterial>(null);
-    
+
     const uniforms = useMemo(() => ({
         color: { value: new THREE.Color(0xffffff) },
+        // backgroundColor: { value: new THREE.Color(0x000000) }, // No longer needed for filling
         time: { value: 0 },
         cursorPositions: { value: Array.from({ length: 10 }, () => new THREE.Vector2(0, 0)) },
         cursorCount: { value: 0 }
@@ -118,6 +122,7 @@ function TopographicMaterial({ positions }: { positions: CursorData[] }) {
 
     const fragmentShader = `
         uniform vec3 color;
+        // uniform vec3 backgroundColor;
         
         varying vec2 vUv;
         varying float vNoise;
@@ -130,9 +135,6 @@ function TopographicMaterial({ positions }: { positions: CursorData[] }) {
             float lower = floor(noise * levels) / levels;
             float lowerDiff = noise - lower;
 
-            // Background color (black)
-            vec3 backgroundColor = vec3(0.0, 0.0, 0.0);
-            
             // Calculate fade at edges for each side
             float fadeDistance = 0.15; // Distance from edge to start fading
             float fadeFactor = 1.0;
@@ -147,10 +149,10 @@ function TopographicMaterial({ positions }: { positions: CursorData[] }) {
             if (lowerDiff < 0.01) {
                 // Higher elevations (higher lower value) = more opaque lines
                 float lineOpacity = (0.1 + (lower * 0.3)) * fadeFactor;
-                gl_FragColor = vec4(color * lineOpacity, 1.0);
+                gl_FragColor = vec4(color, lineOpacity);
             } else {
-                // Fill with background color
-                gl_FragColor = vec4(backgroundColor, 1.0);
+                // Fill with transparent background
+                gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
             }
         }
     `;
@@ -158,23 +160,33 @@ function TopographicMaterial({ positions }: { positions: CursorData[] }) {
     useFrame(({ clock }) => {
         if (materialRef.current) {
             materialRef.current.uniforms.time.value = clock.getElapsedTime();
-            
+
             // Update cursor positions in place
             const uniformArray = materialRef.current.uniforms.cursorPositions.value;
             const posCount = Math.min(positions.length, 10);
-            
+
             for (let i = 0; i < posCount; i++) {
                 uniformArray[i].set(positions[i].x, 1.0 - positions[i].y); // Convert to UV space
             }
-            
+
             // Clear unused positions
             for (let i = posCount; i < 10; i++) {
                 uniformArray[i].set(0, 0);
             }
-            
+
             materialRef.current.uniforms.cursorCount.value = posCount;
         }
     });
+
+    useEffect(() => {
+        if (materialRef.current) {
+            if (theme === 'dark') {
+                materialRef.current.uniforms.color.value.set(0xffffff);
+            } else {
+                materialRef.current.uniforms.color.value.set(0x171717); // neutral-900
+            }
+        }
+    }, [theme]);
 
     return (
         <shaderMaterial
@@ -183,144 +195,144 @@ function TopographicMaterial({ positions }: { positions: CursorData[] }) {
             vertexShader={vertexShader}
             fragmentShader={fragmentShader}
             side={THREE.DoubleSide}
-            transparent={false}
+            transparent={true}
         />
     );
 }
 
-function CursorOverlay({ positions }: { positions: CursorData[] }) {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const { camera, size } = useThree();
-    
-    useFrame(() => {
-        if (!containerRef.current) return;
-        
-        // Update positions of each cursor overlay
-        const children = containerRef.current.querySelectorAll('[data-cursor-index]');
-        positions.forEach((pos, idx) => {
-            const child = children[idx] as HTMLElement;
-            if (!child) return;
-            
-            // Convert 3D position to screen coordinates
-            const worldPos = new THREE.Vector3(
-                (pos.x - 0.5) * 20,
-                2,
-                (pos.y - 0.5) * 20
-            );
-            
-            // Apply rotation to world position
-            const rotatedPos = worldPos.clone();
-            rotatedPos.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 4);
-            
-            const screenPos = worldPos.project(camera);
-            
-            const x = (screenPos.x * 0.5 + 0.5) * size.width;
-            const y = -(screenPos.y * 0.5 - 0.5) * size.height;
-            
-            child.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
-            child.style.opacity = screenPos.z > 1 ? "0" : "1"; // Hide if behind camera
-        });
-    });
-    
-    return (
-        <div
-            ref={containerRef}
-            className="absolute inset-0 pointer-events-none"
-            style={{ width: "100%", height: "100%" }}
-        >
-            {positions.map((cursor, idx) => (
-                <div
-                    key={idx}
-                    data-cursor-index={idx}
-                    className="absolute flex flex-col items-center gap-1"
-                    style={{
-                        pointerEvents: "auto"
-                    }}
-                >
-                    {/* Cursor circle */}
-                    <div
-                        className="w-6 h-6 rounded-full border-2 flex items-center justify-center"
-                        style={{
-                            borderColor: cursor.color || "#ffffff",
-                            backgroundColor: cursor.color ? `${cursor.color}20` : "rgba(255,255,255,0.1)"
-                        }}
-                    >
-                        <div
-                            className="w-2 h-2 rounded-full"
-                            style={{ backgroundColor: cursor.color || "#ffffff" }}
-                        />
-                    </div>
-                    {/* Cursor name */}
-                    <div
-                        className="text-xs font-semibold whitespace-nowrap px-2 py-1 rounded-full"
-                        style={{
-                            backgroundColor: "rgba(0, 0, 0, 0.6)",
-                            color: cursor.color || "#ffffff"
-                        }}
-                    >
-                        {cursor.name || "You"}
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-}
 
 function CameraController({ scrollProgress }: { scrollProgress: number }) {
     useFrame(({ camera }) => {
         // Birds-eye view at top: camera at [0, 0, 8] looking down
         // Isometric view when scrolled: camera at [0, 6, 6] looking at mesh
 
-        const startDistance = 7;
+        const startDistance = 10;
         const endDistance = 25;
 
         const startPos = new THREE.Vector3(0.5, startDistance, 0.5);
         const endPos = new THREE.Vector3(-0.1, endDistance, endDistance);
-        
+
         const targetPosition = new THREE.Vector3().lerpVectors(startPos, endPos, scrollProgress);
-        
+
         // Smooth interpolation
         camera.position.lerp(targetPosition, 0.1);
-        
+
         // Always look at the center of the mesh
         camera.lookAt(0, 0, 0);
     });
-    
+
     return null;
 }
 
-function Scene({ scrollProgress, positions }: { scrollProgress: number; positions: { x: number; y: number }[] }) {
+function SmoothCursor({ targetPos, color, name }: { targetPos: CursorData; color?: string; name?: string }) {
+    const groupRef = useRef<THREE.Group>(null);
+    const smoothPos = useRef({ x: targetPos.x, y: targetPos.y });
+
+    useFrame(() => {
+        // Smooth interpolation using refs (no React re-renders)
+        const lerpFactor = 0.1;
+        smoothPos.current.x += (targetPos.x - smoothPos.current.x) * lerpFactor;
+        smoothPos.current.y += (targetPos.y - smoothPos.current.y) * lerpFactor;
+
+        // Update 3D position
+        if (groupRef.current) {
+            groupRef.current.position.set(
+                (smoothPos.current.x - 0.5) * 20,
+                2,
+                (smoothPos.current.y - 0.5) * 20
+            );
+        }
+    });
+
+    return (
+        <group ref={groupRef}>
+            {/* Html cursor visual */}
+            <Html
+                position={[0, -1, 0]}
+                scale={1}
+            // occlude={"blending"}
+            >
+                <div className="flex flex-col items-center gap-1 pointer-events-none text-gray-600 dark:text-gray-300">
+                    {/* SVG cursor icon */}
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        opacity={0.8}
+                        fill={color || "#000000"}
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="drop-shadow-md"
+                    >
+                        <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+                    </svg>
+                    {/* Cursor label */}
+                    <span
+                        className="text-[10px] font-bold px-1.5 py-0.5 rounded text-white text-nowrap shadow-sm"
+                        style={{ backgroundColor: color || "#ffffff" }}
+                    >
+                        {name || "User"}
+                    </span>
+                </div>
+            </Html>
+        </group>
+    );
+}
+
+function Scene({ scrollProgress, positions, children, theme }: { scrollProgress: number; positions: { x: number; y: number, color?: string, name?: string }[], children?: React.ReactNode, theme: string }) {
+    const smoothPositionsRef = useRef(positions.map(p => ({ ...p })));
+
+    useFrame(() => {
+        // Smooth interpolation of cursor positions for shader
+        const lerpFactor = 0.2;
+        positions.forEach((newPos, idx) => {
+            if (!smoothPositionsRef.current[idx]) {
+                smoothPositionsRef.current[idx] = { ...newPos };
+            }
+            const smooth = smoothPositionsRef.current[idx];
+            smooth.x += (newPos.x - smooth.x) * lerpFactor;
+            smooth.y += (newPos.y - smooth.y) * lerpFactor;
+            smooth.color = newPos.color;
+            smooth.name = newPos.name;
+        });
+
+        // Remove extra positions if position count decreased
+        if (smoothPositionsRef.current.length > positions.length) {
+            smoothPositionsRef.current.length = positions.length;
+        }
+    });
+
     return (
         <>
             <CameraController scrollProgress={scrollProgress} />
+            {children}
             <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, Math.PI / 4]}>
                 <planeGeometry args={[25, 25, 256, 256]} />
-                <TopographicMaterial positions={positions} />
+                <TopographicMaterial positions={smoothPositionsRef.current} theme={theme} />
             </mesh>
-            
+
             <group rotation={[0, Math.PI / 4, 0]}>
-            {/* Cursor position spheres */}
-            {positions.map((pos, idx) => (
-                <mesh 
-                    key={idx} 
-                    position={[
-                        (pos.x - 0.5) * 20,
-                        2,
-                        (pos.y - 0.5) * 20
-                    ]}
-                >
-                    <sphereGeometry args={[0.5, 32, 32]} />
-                    <meshBasicMaterial color={0xffffff} />
-                </mesh>
-            ))}
+                {/* Cursor visuals with smooth interpolation */}
+                {positions.map((pos, idx) => (
+                    <SmoothCursor
+                        key={`${pos.name}-${idx}`}
+                        targetPos={pos}
+                        color={pos.color}
+                        name={pos.name}
+                    />
+                ))}
             </group>
         </>
     );
 }
 
-export function AsciiBackground({ positions }: { positions: { x: number; y: number }[] }) {
+export function AsciiBackground({ positions, children }: { positions: { x: number; y: number; color?: string; name?: string }[], children?: React.ReactNode }) {
     const [scrollProgress, setScrollProgress] = useState(0);
-    
+    const { theme } = useTheme();
+
     useEffect(() => {
         const handleScroll = () => {
             const scrollTop = window.scrollY;
@@ -328,22 +340,24 @@ export function AsciiBackground({ positions }: { positions: { x: number; y: numb
             const progress = Math.min(scrollTop / Math.max(docHeight * 0.3, 1), 1); // Use first 30% of page
             setScrollProgress(progress);
         };
-        
+
         window.addEventListener('scroll', handleScroll);
         handleScroll(); // Initial call
-        
+
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
-    
+
     return (
-        <div 
-            className="fixed top-0 inset-0 pointer-events-none w-full h-screen overflow-hidden"
+        <div
+            className="fixed top-0 inset-0 pointer-events-none w-full h-screen overflow-hidden -z-10"
         >
             <Canvas
-                camera={{ position: [0, 8, 0], fov: 85 }}
-                gl={{ alpha: false, antialias: true }}
+                camera={{ position: [0, 8, 0], fov: 85, near: 0.01, far: 100 }}
+                gl={{ alpha: true, antialias: true }}
             >
-                <Scene scrollProgress={scrollProgress} positions={positions} />
+                <Scene scrollProgress={scrollProgress} positions={positions} theme={theme}>
+                    {children}
+                </Scene>
             </Canvas>
         </div>
     );

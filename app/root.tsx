@@ -25,20 +25,24 @@ export const links: Route.LinksFunction = () => [
 
 import { SharedCursors } from "./components/SharedCursors";
 
+import { ThemeProvider } from "./components/ThemeContext";
+
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className="bg-white dark:bg-gray-950 transition-colors duration-300">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
       </head>
-      <body className="relative min-h-[500vh] h-max">
-        <SharedCursors />
-        {children}
-        <ScrollRestoration />
-        <Scripts />
+      <body className="relative h-max pointer-events-none transition-colors duration-300">
+        <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+          <SharedCursors />
+          {children}
+          <ScrollRestoration />
+          <Scripts />
+        </ThemeProvider>
       </body>
     </html>
   );

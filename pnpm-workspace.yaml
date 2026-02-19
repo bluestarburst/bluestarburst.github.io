@@ -1,4 +1,0 @@
-packages:
-  - 'pluto-rtc/ts'
-overrides:
-  pluto-rtc: link:../Plutonium-src/pluto-rtc/ts

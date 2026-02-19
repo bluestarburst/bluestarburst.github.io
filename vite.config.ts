@@ -4,5 +4,12 @@ import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
+  server: {
+    fs: {
+      strict: false,
+      // Alternatively, allow specific paths:
+      // allow: ['..'] 
+    }
+  },
   plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
 });

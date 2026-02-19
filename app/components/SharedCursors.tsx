@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Client, Connection } from 'pluto-rtc';
 import { AsciiBackground } from './AsciiBackground';
+import { StarField, FloatingGeometry, SpaceDebris } from './ThreeElements';
+import { useTheme } from './ThemeContext';
 
 const ROOM_ID = 'demo';
 
@@ -28,6 +30,7 @@ export function SharedCursors() {
     const connectionsRef = useRef<Connection[]>([]);
     const mountedRef = useRef(true);
     const [myMousePosition, setMyMousePosition] = useState({ x: 0, y: 0, clientY: 0 });
+    const { theme } = useTheme();
 
     useEffect(() => {
         mountedRef.current = true;
@@ -135,9 +138,9 @@ export function SharedCursors() {
             color: myColor.current
         };
 
-        connectionsRef.current.forEach(conn => {
-            conn.send({ type: 'cursor', payload }).catch(() => { });
-        });
+        // connectionsRef.current.forEach(conn => {
+        //     conn.send({ type: 'cursor', payload }).catch(() => { });
+        // });
     }
 
     useEffect(() => {
@@ -152,48 +155,36 @@ export function SharedCursors() {
     return (
         <>
             {/* Active Cursors Count UI */}
-            <div className="fixed bottom-4 right-4 z-[9999] pointer-events-none">
+            <div className="fixed bottom-4 right-4 z-9999 pointer-events-none">
                 <div className="px-3 py-1.5 bg-black/80 backdrop-blur rounded-full text-[10px] font-bold text-white border border-white/10 shadow-lg flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                     <span>{activeMemberCount} ACTIVE CURSOR{activeMemberCount !== 1 ? 'S' : ''}</span>
                 </div>
             </div>
 
-            {/* Remote Cursors Layer */}
-            <div className="absolute h-full w-full inset-0 pointer-events-none z-[9998] overflow-hidden">
-                {Object.entries(cursors).map(([peerId, { x, y, color }]) => (
-                    <div
-                        key={peerId}
-                        className="absolute top-0 left-0 w-full h-full transition-transform duration-75 ease-linear flex items-start gap-1 will-change-transform"
-                        style={{
-                            transform: `translate3d(${x * 100}vw, ${y * 100}%, 0)`,
-                        }}
-                    >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="24"
-                            height="24"
-                            viewBox="0 0 24 24"
-                            fill={color}
-                            stroke="white"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="-mt-1 -ml-1 drop-shadow-md"
-                        >
-                            <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
-                        </svg>
-                        <span
-                            className="text-[10px] font-bold px-1.5 py-0.5 rounded text-white text-nowrap shadow-sm translate-y-4 -translate-x-2"
-                            style={{ backgroundColor: color }}
-                        >
-                            {peerId.slice(0, 4)}
-                        </span>
-                    </div>
-                ))}
-            </div>
+            {/* Remote Cursors are now rendered in the 3D scene via AsciiBackground */}
 
-            <AsciiBackground positions={[...Object.values(cursors), myMousePosition].map(c => ({ x: c.x, y: c.clientY }))} />
+            <AsciiBackground positions={[
+                ...Object.entries(cursors).map(([peerId, { x, y, clientY, color }]) => ({
+                    x,
+                    y: clientY,
+                    color,
+                    name: peerId.slice(0, 4)
+                })),
+                { x: myMousePosition.x, y: myMousePosition.clientY, color: myColor.current, name: 'You' }
+            ]}>
+                <ambientLight intensity={0.5} />
+                <pointLight position={[10, 10, 10]} intensity={1} color="#d2b48c" />
+
+                <StarField theme={theme} />
+
+                {/* Dynamically generated space debris along camera path */}
+                <SpaceDebris theme={theme} />
+
+                {/* Keep a few manual ones for specific foreground framing if desired */}
+                {/* <FloatingGeometry position={[-4, 2, -5]} color="#d2b48c" geometryType="icosahedron" />
+                <FloatingGeometry position={[4, -2, -3]} color="#a0a0a0" geometryType="octahedron" /> */}
+            </AsciiBackground>
         </>
     );
 }
