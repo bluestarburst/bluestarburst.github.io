@@ -103,7 +103,7 @@ const TimelineItem = ({ date, title, subtitle, details }: { date: string, title:
     <div className="text-sm text-neutral-600 dark:text-neutral-500 font-mono mb-2 pointer-events-auto w-max transition-colors">{subtitle}</div>
     <ul className="list-none space-y-1">
       {details.map((detail, i) => (
-        <li key={i} className="text-sm text-neutral-600 dark:text-neutral-400 font-mono pl-4 relative before:content-['>'] before:absolute before:left-0 before:text-neutral-400 dark:before:text-neutral-700 w-max pointer-events-auto transition-colors">
+        <li key={i} className="text-sm text-neutral-600 dark:text-neutral-400 font-mono pl-4 relative before:content-['>'] before:absolute before:left-0 before:text-neutral-400 dark:before:text-neutral-700 w-full pointer-events-auto transition-colors">
           {detail}
         </li>
       ))}

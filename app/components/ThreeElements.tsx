@@ -162,18 +162,15 @@ export function SpaceDebris({ theme }: { theme?: string }) {
             const pos = new THREE.Vector3().copy(startPos).add(direction.clone().multiplyScalar(t));
 
             // Add randomness perpendicular to the path
-            // add a minimum spread to prevent the debris from being too close to the camera
-            const minSpread = 10;
 
-            pos.x += (Math.random() - 0.5) * 30; // Spread width
-            pos.y += (Math.random() - 0.5) * 30; // Spread height
-            pos.z += (Math.random() - 0.5) * 30;
+            const randomX = Math.random() - 0.5 + Math.sin(t * 10) * 0.5;
+            const randomZ = Math.random() - 0.5 + Math.cos(t * 10) * 0.5;
+            const randomAmt = 20;
+            const minSpread = 5;
 
-            // Enforce minimum distance from camera
-            const distance = pos.length();
-            if (distance < minSpread) {
-                pos.normalize().multiplyScalar(minSpread);
-            }
+            pos.x += randomX * randomAmt + Math.sign(randomX) * minSpread; // Spread width
+            // pos.y += (Math.random() - 0.5) * 40; // Spread height
+            pos.z += randomZ * randomAmt + Math.sign(randomZ) * minSpread;
 
             items.push({
                 position: [pos.x, pos.y, pos.z],
@@ -183,7 +180,7 @@ export function SpaceDebris({ theme }: { theme?: string }) {
         }
 
         // 2. Cluster around the end position (Zoomed out view)
-        for (let i = 0; i < 20; i++) {
+        for (let i = 0; i < 5; i++) {
             // Random sphere distribution around endPos
             const r = 5 + Math.random() * 10; // Radius 5 to 15
             const theta = Math.random() * Math.PI * 2;
