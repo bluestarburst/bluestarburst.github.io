@@ -125,7 +125,7 @@ export default function Home() {
   const projects = [
     {
       title: "Plutonium",
-      description: "A cutting-edge platform emphasized in portfolio. High-performance computing architecture or service integration.",
+      description: "A cutting-edge platform enabling developers to make the most out of IoT. High-performance computing architecture or service integration.",
       tags: ["React", "System Architecture", "Web"],
       featured: true,
       links: [
