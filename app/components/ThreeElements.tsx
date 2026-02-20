@@ -4,6 +4,12 @@ import * as THREE from 'three';
 
 // --- 3D Background Components ---
 
+type DebrisItem = {
+    position: [number, number, number],
+    color: string,
+    geometryType: 'box' | 'icosahedron' | 'octahedron'
+};
+
 export function StarField({ theme }: { theme?: string }) {
     const count = 750;
     const positions = useMemo(() => {
@@ -143,9 +149,143 @@ export function FloatingGeometry({ position, color, geometryType = 'box', theme 
     );
 }
 
+export function ShootingStars({ spawnPoints, theme }: { spawnPoints: [number, number, number][], theme?: string }) {
+    const starCount = Math.max(1, Math.min(10, spawnPoints.length || 1));
+    const headRefs = useRef<(THREE.Mesh | null)[]>([]);
+    const headMaterialRefs = useRef<(THREE.MeshBasicMaterial | null)[]>([]);
+    const trailRefs = useRef<(THREE.Mesh | null)[]>([]);
+    const trailMaterialRefs = useRef<(THREE.MeshBasicMaterial | null)[]>([]);
+
+    const direction = useMemo(() => new THREE.Vector3(-0.1, 0.25, 1).normalize(), []);
+    const backwardDirection = useMemo(() => direction.clone().multiplyScalar(-1), [direction]);
+    const trailQuaternion = useMemo(
+        () => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), backwardDirection),
+        [backwardDirection]
+    );
+
+    const stars = useRef(Array.from({ length: starCount }, (_, index) => {
+        const safeSpawnIndex = spawnPoints.length > 0 ? index % spawnPoints.length : 0;
+        const spawn = spawnPoints[safeSpawnIndex] ?? [0, 0, 0];
+        const speed = 4 + Math.random() * 2;
+        return {
+            spawnIndex: safeSpawnIndex,
+            position: new THREE.Vector3(spawn[0], spawn[1], spawn[2]),
+            velocity: direction.clone().multiplyScalar(speed),
+            age: Math.random() * 1.5,
+            lifetime: 2.8 + Math.random() * 1.8,
+            cooldown: 0,
+            trailLength: 1.8 + Math.random() * 2.2,
+            fadeInDuration: 0.45,
+            fadeOutDuration: 0.75,
+        };
+    }));
+
+    const respawnStar = (index: number) => {
+        const star = stars.current[index];
+        const spawnIndex = spawnPoints.length > 0 ? Math.floor(Math.random() * spawnPoints.length) : 0;
+        const spawn = spawnPoints[spawnIndex] ?? [0, 0, 0];
+        const speed = 4 + Math.random() * 2;
+
+        star.spawnIndex = spawnIndex;
+        star.position.set(spawn[0], spawn[1], spawn[2]);
+        star.velocity.copy(direction).multiplyScalar(speed);
+        star.age = 0;
+        star.lifetime = 2.8 + Math.random() * 1.8;
+        star.cooldown = 0;
+        star.trailLength = 1.8 + Math.random() * 2.2;
+    };
+
+    useFrame((_, delta) => {
+        const clampedDelta = Math.min(delta, 0.1);
+
+        for (let i = 0; i < stars.current.length; i++) {
+            const star = stars.current[i];
+            const head = headRefs.current[i];
+            const headMaterial = headMaterialRefs.current[i];
+            const trail = trailRefs.current[i];
+            const trailMaterial = trailMaterialRefs.current[i];
+
+            if (!head || !headMaterial || !trail || !trailMaterial) continue;
+
+            if (star.cooldown > 0) {
+                star.cooldown -= clampedDelta;
+                head.visible = false;
+                trail.visible = false;
+                headMaterial.opacity = 0;
+                trailMaterial.opacity = 0;
+                if (star.cooldown <= 0) {
+                    respawnStar(i);
+                    head.visible = true;
+                    trail.visible = true;
+                }
+                continue;
+            }
+
+            star.age += clampedDelta;
+            star.position.addScaledVector(star.velocity, clampedDelta);
+
+            if (star.age >= star.lifetime) {
+                star.cooldown = 0.2 + Math.random() * 0.6;
+                continue;
+            }
+
+            const fadeIn = Math.min(0.75, star.age / star.fadeInDuration);
+            const fadeOut = Math.min(0.75, (star.lifetime - star.age) / star.fadeOutDuration);
+            const opacity = Math.max(0, Math.min(fadeIn, fadeOut));
+
+            head.position.copy(star.position);
+            head.visible = true;
+            headMaterial.opacity = opacity;
+
+            trail.visible = true;
+            trail.position
+                .copy(star.position)
+                .addScaledVector(backwardDirection, star.trailLength * 0.5);
+            trail.quaternion.copy(trailQuaternion);
+            trail.scale.set(1, star.trailLength, 1);
+
+            trailMaterial.opacity = opacity * (theme === 'dark' ? 0.8 : 0.95);
+        }
+    });
+
+    return (
+        <group>
+            {stars.current.map((_, index) => (
+                <group key={index}>
+                    <mesh ref={(mesh) => { headRefs.current[index] = mesh; }}>
+                        <sphereGeometry args={[0.055, 8, 8]} />
+                        <meshBasicMaterial
+                            ref={(material) => { headMaterialRefs.current[index] = material; }}
+                            color={theme === 'dark' ? '#ffffff' : '#9ca3af'}
+                            transparent
+                            opacity={0}
+                            blending={theme === 'dark' ? THREE.AdditiveBlending : THREE.NormalBlending}
+                            depthWrite={false}
+                            toneMapped={false}
+                        />
+                    </mesh>
+                    <mesh ref={(mesh) => { trailRefs.current[index] = mesh; }}>
+                        <cylinderGeometry args={[0.004, 0.09, 1, 8, 1, true]} />
+                        <meshBasicMaterial
+                            ref={(material) => { trailMaterialRefs.current[index] = material; }}
+                            color={theme === 'dark' ? '#fffffff' : '#9ca3af'}
+                            transparent
+                            opacity={0}
+                            blending={theme === 'dark' ? THREE.AdditiveBlending : THREE.NormalBlending}
+                            depthWrite={false}
+                            side={THREE.DoubleSide}
+                            toneMapped={false}
+                        />
+                    </mesh>
+                </group>
+            ))}
+        </group>
+    );
+}
+
 export function SpaceDebris({ theme }: { theme?: string }) {
     const debris = useMemo(() => {
-        const items: { position: [number, number, number], color: string, geometryType: 'box' | 'icosahedron' | 'octahedron' }[] = [];
+        const items: DebrisItem[] = [];
 
         const startPos = new THREE.Vector3(0, 0, 0);
         const endPos = new THREE.Vector3(-0.1, 15, 25);
@@ -211,6 +351,10 @@ export function SpaceDebris({ theme }: { theme?: string }) {
                     theme={theme}
                 />
             ))}
+            <ShootingStars
+                spawnPoints={debris.map(item => item.position)}
+                theme={theme}
+            />
         </>
     );
 }
