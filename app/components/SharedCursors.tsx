@@ -8,8 +8,7 @@ const ROOM_ID = 'demo';
 
 interface CursorPosition {
     x: number;
-    y: number;
-    clientY: number;
+    z: number;
     color: string;
 }
 
@@ -29,7 +28,7 @@ export function SharedCursors() {
     const myColor = useRef(getRandomColor());
     const connectionsRef = useRef<Connection[]>([]);
     const mountedRef = useRef(true);
-    const [myMousePosition, setMyMousePosition] = useState({ x: 0, y: 0, clientY: 0 });
+    const [myMousePosition, setMyMousePosition] = useState({ x: 0, z: 0 });
     const { theme } = useTheme();
 
     useEffect(() => {
@@ -108,19 +107,12 @@ export function SharedCursors() {
         });
     };
 
-    const myLastClientX = useRef(0);
-    const myLastClientY = useRef(0);
-
-    const handleMouseMove = (e: MouseEvent) => {
+    const handleProjectedCursorMove = (position: { x: number; z: number }) => {
         const payload = {
-            x: (e.clientX + document.documentElement.scrollLeft) / document.body.clientWidth,
-            y: (e.clientY + document.documentElement.scrollTop) / document.body.clientHeight,
-            clientY: e.clientY / window.innerHeight,
+            x: position.x,
+            z: position.z,
             color: myColor.current
         };
-
-        myLastClientX.current = e.clientX;
-        myLastClientY.current = e.clientY;
 
         setMyMousePosition(payload);
 
@@ -128,29 +120,6 @@ export function SharedCursors() {
             conn.send({ type: 'cursor', payload }).catch(() => { });
         });
     };
-
-    const handleScroll = (e: Event) => {
-
-        const payload = {
-            x: myLastClientX.current + (window.scrollX / document.body.clientWidth),
-            y: myLastClientY.current + (window.scrollY / document.body.clientHeight),
-            clientY: myLastClientY.current / window.innerHeight,
-            color: myColor.current
-        };
-
-        // connectionsRef.current.forEach(conn => {
-        //     conn.send({ type: 'cursor', payload }).catch(() => { });
-        // });
-    }
-
-    useEffect(() => {
-        window.addEventListener('mousemove', handleMouseMove);
-        document.getRootNode().addEventListener('scroll', handleScroll);
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            document.getRootNode().removeEventListener('scroll', handleScroll);
-        };
-    }, []);
 
     return (
         <>
@@ -165,14 +134,14 @@ export function SharedCursors() {
             {/* Remote Cursors are now rendered in the 3D scene via AsciiBackground */}
 
             <AsciiBackground positions={[
-                ...Object.entries(cursors).map(([peerId, { x, y, clientY, color }]) => ({
+                ...Object.entries(cursors).map(([peerId, { x, z, color }]) => ({
                     x,
-                    y: clientY,
+                    z,
                     color,
                     name: peerId.slice(0, 4)
                 })),
-                { x: myMousePosition.x, y: myMousePosition.clientY, color: myColor.current, name: 'You' }
-            ]}>
+                { x: myMousePosition.x, z: myMousePosition.z, color: myColor.current, name: 'You' }
+            ]} onCursorMove={handleProjectedCursorMove}>
                 <ambientLight intensity={0.5} />
                 <pointLight position={[10, 10, 10]} intensity={1} color="#d2b48c" />
 
