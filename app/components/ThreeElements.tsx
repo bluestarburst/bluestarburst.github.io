@@ -268,7 +268,7 @@ export function ShootingStars({ spawnPoints, theme }: { spawnPoints: [number, nu
                         <cylinderGeometry args={[0.004, 0.09, 1, 8, 1, true]} />
                         <meshBasicMaterial
                             ref={(material) => { trailMaterialRefs.current[index] = material; }}
-                            color={theme === 'dark' ? '#fffffff' : '#9ca3af'}
+                            color={theme === 'dark' ? '#ffffff' : '#9ca3af'}
                             transparent
                             opacity={0}
                             blending={theme === 'dark' ? THREE.AdditiveBlending : THREE.NormalBlending}

@@ -133,13 +133,13 @@ export default function Home() {
       ]
     },
     {
-      title: "Pluto-RTC",
+      title: "OpenRTC",
       description: "Real-time communication library and infrastructure. Engineered for low-latency data transmission.",
       tags: ["WebRTC", "NPM Package", "Networking"],
       featured: true,
       links: [
-        { url: "https://plutonium.hargreaves.dev/docs", label: "Documentation", icon: <FileText size={18} /> },
-        { url: "https://www.npmjs.com/package/pluto-rtc", label: "NPM Registry", icon: <Box size={18} /> }
+        { url: "https://docs.openrtc.app/openrtc/quickstart", label: "Documentation", icon: <FileText size={18} /> },
+        { url: "https://www.npmjs.com/package/openrtc", label: "NPM Registry", icon: <Box size={18} /> }
       ]
     },
     {
@@ -359,4 +359,3 @@ export default function Home() {
     </div>
   );
 }
-
