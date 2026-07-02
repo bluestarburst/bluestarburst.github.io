@@ -1,12 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { OpenRTC, type OpenRTCClient } from 'openrtc';
+import { OpenRTC, spaceToken, type OpenRTCClient } from 'openrtc';
 import { AsciiBackground } from './AsciiBackground';
 import { StarField, SpaceDebris } from './ThreeElements';
 import { useTheme } from './ThemeContext';
+import { joinAvailableRoom } from './sharedCursorsRooms';
 
-const ROOM_PREFIX = 'PORTFOLIO-CURSORS';
-const ROOM_SHARDS = 12;
-const API_KEY = 'pk_live_eefe17dd222ab2f010c6f41d37397f35985cf2e3';
+const API_KEY = (import.meta.env.VITE_OPENRTC_API_KEY ?? '').trim();
 
 interface CursorPosition {
     x: number;
@@ -20,8 +19,6 @@ const COLORS = [
 ];
 
 const getRandomColor = () => COLORS[Math.floor(Math.random() * COLORS.length)];
-
-const getRoomId = (shard: number) => `${ROOM_PREFIX}-${shard}`;
 
 export function SharedCursors() {
     const [cursors, setCursors] = useState<Record<string, CursorPosition>>({});
@@ -38,6 +35,8 @@ export function SharedCursors() {
     const stopRoomWatchRef = useRef<(() => void) | null>(null);
     const pendingRoomDialsRef = useRef<Set<string>>(new Set());
     const failedRoomDialsRef = useRef<Map<string, number>>(new Map());
+    const cursorSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const latestCursorPayloadRef = useRef<CursorPosition | null>(null);
     const [myMousePosition, setMyMousePosition] = useState({ x: 0, z: 0 });
     const { theme } = useTheme();
 
@@ -46,52 +45,6 @@ export function SharedCursors() {
             connectionsRef.current.map((conn) => conn.remoteNodeId?.trim() || conn.id),
         );
         setActiveMemberCount(peers.size + 1);
-    };
-
-    const joinOrCreateRoomOnce = async (client: OpenRTCClient, roomId: string) => {
-        try {
-            return await client.joinRoom(roomId, { bootstrapPeers: false });
-        } catch (joinError) {
-            const message = joinError instanceof Error ? joinError.message : String(joinError);
-            if (!/room not found|not found|404/i.test(message)) {
-                throw joinError;
-            }
-
-            try {
-                await client.createRoom(roomId);
-            } catch (createError) {
-                const createMessage = createError instanceof Error ? createError.message : String(createError);
-                if (!/already exists|409/i.test(createMessage)) {
-                    throw createError;
-                }
-            }
-
-            return client.joinRoom(roomId, { bootstrapPeers: false });
-        }
-    };
-
-    const joinAvailableRoom = async (client: OpenRTCClient) => {
-        let lastError: unknown = null;
-
-        for (let attempt = 0; attempt < ROOM_SHARDS; attempt += 1) {
-            const roomId = getRoomId(attempt);
-
-            try {
-                const connections = await joinOrCreateRoomOnce(client, roomId);
-                return { roomId, connections };
-            } catch (error) {
-                lastError = error;
-                const message = error instanceof Error ? error.message : String(error);
-                const roomIsFull =
-                    /room is full|resource-exhausted|429/i.test(message) ||
-                    /full \(\d+\/\d+ members\)/i.test(message);
-                if (!roomIsFull) {
-                    throw error;
-                }
-            }
-        }
-
-        throw lastError ?? new Error('All shared cursor rooms are full.');
     };
 
     useEffect(() => {
@@ -106,13 +59,22 @@ export function SharedCursors() {
 
                 const client = OpenRTC({
                     apiKey: API_KEY,
-                    discoveryMode: 'personal',
-                    spaceKey: 'portfolio-cursors',
+                    discoveryMode: 'space',
+                    space: 'portfolio-cursors',
                     storagePrefix: 'portfolio-cursors',
                     nodeIdPersistence: 'ephemeral',
+                    strictMode: true,
+                    spaceTokenProvider: spaceToken({
+                        apiKey: API_KEY,
+                        space: 'portfolio-cursors',
+                        memberIdStorageKey: 'portfolio-cursors:member-id',
+                    }),
                     transports: {
-                        webrtc: true,
-                        iroh: { persistenceMode: 'ephemeral' },
+                        webrtc: { privacyMode: true },
+                        iroh: {
+                            persistenceMode: 'ephemeral',
+                            relayOnly: true,
+                        },
                     },
                 });
                 await client.connect();
@@ -120,7 +82,7 @@ export function SharedCursors() {
                 if (!mountedRef.current) return;
                 clientRef.current = client;
 
-                client.onConnection((conn) => {
+                client.onConnection((conn: RoomConnection) => {
                     if (mountedRef.current) setupConnection(conn);
                 });
 
@@ -130,13 +92,13 @@ export function SharedCursors() {
                 activeRoomIdRef.current = roomId;
                 setStatus('Joined');
 
-                connections.forEach(conn => setupConnection(conn));
+                connections.forEach((conn: RoomConnection) => setupConnection(conn));
                 updateMemberCount();
 
-                const localNodeId = await client.getNodeId().catch(() => null);
-                stopRoomWatchRef.current = client.watchRoom(roomId, (members) => {
+                const localNodeId = await client.advanced.nodeId().catch(() => null);
+                stopRoomWatchRef.current = client.watchRoom(roomId, (members: Array<{ nodeId?: string; ticket?: string }>) => {
                     const now = Date.now();
-                    members.forEach((member) => {
+                    members.forEach((member: { nodeId?: string; ticket?: string }) => {
                         const nodeId = member.nodeId?.trim();
                         const ticket = member.ticket?.trim();
                         if (!nodeId || !ticket || nodeId === localNodeId) return;
@@ -145,8 +107,8 @@ export function SharedCursors() {
                         if ((failedRoomDialsRef.current.get(nodeId) ?? 0) > now) return;
 
                         pendingRoomDialsRef.current.add(nodeId);
-                        client.connectPeer({ ticket })
-                            .then((conn) => {
+                        client.peers.connect({ deviceId: nodeId, ticket })
+                            .then((conn: RoomConnection) => {
                                 failedRoomDialsRef.current.delete(nodeId);
                                 if (mountedRef.current) setupConnection(conn);
                             })
@@ -177,6 +139,11 @@ export function SharedCursors() {
             connectionsRef.current = [];
             pendingRoomDialsRef.current.clear();
             failedRoomDialsRef.current.clear();
+            if (cursorSendTimerRef.current) {
+                clearTimeout(cursorSendTimerRef.current);
+                cursorSendTimerRef.current = null;
+            }
+            latestCursorPayloadRef.current = null;
         };
     }, []);
 
@@ -217,10 +184,17 @@ export function SharedCursors() {
         };
 
         setMyMousePosition(payload);
+        latestCursorPayloadRef.current = payload;
 
-        connectionsRef.current.forEach(conn => {
-            conn.send({ type: 'cursor', payload }).catch(() => { });
-        });
+        if (cursorSendTimerRef.current) return;
+        cursorSendTimerRef.current = setTimeout(() => {
+            cursorSendTimerRef.current = null;
+            const latestPayload = latestCursorPayloadRef.current;
+            if (!mountedRef.current || !latestPayload) return;
+            connectionsRef.current.forEach(conn => {
+                conn.send({ type: 'cursor', payload: latestPayload }).catch(() => { });
+            });
+        }, 50);
     };
 
     return (

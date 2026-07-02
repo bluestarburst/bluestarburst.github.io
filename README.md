@@ -1,87 +1,35 @@
-# Welcome to React Router!
+# Bluestar Bursts Portfolio
 
-A modern, production-ready template for building full-stack React applications using React Router.
+This is the Bluestar Bursts portfolio site. It is an OpenRTC consumer app, not
+the Plutonium product and not the OpenRTC developer portal.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
-
-## Features
-
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
-
-## Getting Started
-
-### Installation
-
-Install the dependencies:
+## Dev Mode
 
 ```bash
-npm install
+pnpm dev
 ```
 
-### Development
+`pnpm dev` is a live consumer-demo mode. The site has no Stripe account and no
+Firebase project in this workspace; shared cursors use the portfolio-specific
+OpenRTC public key from `VITE_OPENRTC_API_KEY` and scoped space tokens from
+production OpenRTC.
 
-Start the development server with HMR:
+Use only the portfolio OpenRTC app identity here. Do not copy Plutonium,
+Notebook, or sample-game keys into this repo.
+
+## Build And Deploy
 
 ```bash
-npm run dev
+pnpm build
+pnpm typecheck
+pnpm test
 ```
 
-Your application will be available at `http://localhost:5173`.
+GitHub Pages deploys read `VITE_OPENRTC_API_KEY` from this repo's Actions
+secrets. That secret must be the portfolio app public key from the workspace
+`[Portfolio App]` secret group.
 
-## Building for Production
+The OpenRTC package is consumed through a local `file:../openrtc/packages/openrtc`
+dependency in this workspace. Rebuild and reinstall the package copy after SDK
+changes.
 
-Create a production build:
-
-```bash
-npm run build
-```
-
-## Deployment
-
-### Docker Deployment
-
-To build and run using Docker:
-
-```bash
-docker build -t my-app .
-
-# Run the container
-docker run -p 3000:3000 my-app
-```
-
-The containerized application can be deployed to any platform that supports Docker, including:
-
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
-
-### DIY Deployment
-
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
-
-Make sure to deploy the output of `npm run build`
-
-```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
-```
-
-## Styling
-
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
-
----
-
-Built with ❤️ using React Router.
