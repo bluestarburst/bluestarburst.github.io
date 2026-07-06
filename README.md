@@ -7,13 +7,16 @@ the Plutonium product and not the OpenRTC developer portal.
 
 ```bash
 pnpm mode
+pnpm env:setup -- --tier dev
+pnpm env:doctor -- --tier dev
 pnpm dev
 ```
 
 `pnpm dev` is a live consumer-demo mode. The site has no Stripe account and no
 Firebase project in this workspace; shared cursors use the portfolio-specific
 OpenRTC public key from `VITE_OPENRTC_API_KEY` and scoped space tokens from
-production OpenRTC.
+production OpenRTC. `pnpm env:setup` writes `.env.development.local`; set the
+portfolio-specific `VITE_OPENRTC_API_KEY` there for local development.
 
 Use only the portfolio OpenRTC app identity here. Do not copy Plutonium,
 Notebook, or sample-game keys into this repo.

@@ -6,6 +6,9 @@
   "scripts": {
     "build": "react-router build",
     "dev": "react-router dev",
+    "setup": "node scripts/setup-env.mjs",
+    "env:setup": "node scripts/setup-env.mjs",
+    "env:doctor": "node scripts/setup-env.mjs --check",
     "mode": "node scripts/mode.mjs",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",

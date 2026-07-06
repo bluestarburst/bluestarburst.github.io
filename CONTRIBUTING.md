@@ -10,11 +10,14 @@ OpenRTC identity.
 corepack enable
 pnpm install
 pnpm mode
+pnpm env:setup -- --tier dev
+pnpm env:doctor -- --tier dev
 pnpm dev
 ```
 
-Set `VITE_OPENRTC_API_KEY` in `.env` for shared cursors. Use only the
-portfolio OpenRTC public key. Do not copy Plutonium, Notebook, or boilerplate
+`pnpm env:setup` writes `.env.development.local`. Set
+`VITE_OPENRTC_API_KEY` there for shared cursors. Use only the portfolio
+OpenRTC public key. Do not copy Plutonium, Notebook, or boilerplate
 credentials into this repo.
 
 ## Validation
