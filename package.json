@@ -1,10 +1,15 @@
 {
   "name": "bluestarburst.github.io",
   "private": true,
+  "packageManager": "pnpm@11.7.0",
   "type": "module",
   "scripts": {
     "build": "react-router build",
     "dev": "react-router dev",
+    "setup": "node scripts/setup-env.mjs",
+    "env:setup": "node scripts/setup-env.mjs",
+    "env:doctor": "node scripts/setup-env.mjs --check",
+    "mode": "node scripts/mode.mjs",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
     "test": "vitest run"
@@ -18,7 +23,7 @@
     "@types/three": "^0.183.0",
     "isbot": "^5.1.31",
     "lucide-react": "^0.574.0",
-    "openrtc": "file:../openrtc/packages/openrtc",
+    "openrtc": "^0.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router": "7.12.0",
