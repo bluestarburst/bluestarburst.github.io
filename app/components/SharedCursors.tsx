@@ -201,7 +201,13 @@ export function SharedCursors() {
         <>
             {/* Active Cursors Count UI */}
             <div className="fixed bottom-4 right-4 z-9999 pointer-events-none">
-                <div className="px-3 py-1.5 bg-black/80 backdrop-blur rounded-full text-[10px] font-bold text-white border border-white/10 shadow-lg flex items-center gap-2">
+                <div
+                    aria-label={`OpenRTC ${status}: ${activeMemberCount} active cursors`}
+                    className="px-3 py-1.5 bg-black/80 backdrop-blur rounded-full text-[10px] font-bold text-white border border-white/10 shadow-lg flex items-center gap-2"
+                    data-openrtc-status={status}
+                    data-remote-cursor-count={Object.keys(cursors).length}
+                    data-testid="openrtc-presence"
+                >
                     <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                     <span>{activeMemberCount} ACTIVE CURSOR{activeMemberCount !== 1 ? 'S' : ''}</span>
                 </div>

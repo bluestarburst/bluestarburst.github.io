@@ -11,6 +11,7 @@
     "env:doctor": "node scripts/setup-env.mjs --check",
     "mode": "node scripts/mode.mjs",
     "start": "react-router-serve ./build/server/index.js",
+    "test:connectivity": "playwright test",
     "typecheck": "react-router typegen && tsc",
     "test": "vitest run"
   },
@@ -23,17 +24,18 @@
     "@types/three": "^0.183.0",
     "isbot": "^5.1.31",
     "lucide-react": "^0.574.0",
-    "openrtc": "^0.2.0",
+    "openrtc": "^1.0.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router": "7.12.0",
     "three": "^0.183.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@react-router/dev": "7.12.0",
     "@tailwindcss/vite": "^4.1.13",
     "@types/node": "^22",
-    "@types/react": "^19.2.7",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "tailwindcss": "^4.1.13",
     "typescript": "^5.9.2",

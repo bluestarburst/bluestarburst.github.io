@@ -27,11 +27,19 @@ Notebook, or sample-game keys into this repo.
 pnpm build
 pnpm typecheck
 pnpm test
+pnpm exec playwright install chromium
+pnpm test:connectivity
 ```
 
 GitHub Pages deploys read `VITE_OPENRTC_API_KEY` from this repo's Actions
 secrets. That secret must be the portfolio app public key from the workspace
 `[Portfolio App]` secret group.
+
+`pnpm test:connectivity` builds the production client, opens two isolated
+Chromium contexts, waits for both to join the portfolio cursor room, and
+requires a cursor payload from each context to render in the other. It uses the
+managed production OpenRTC service and therefore requires the portfolio
+`VITE_OPENRTC_API_KEY`; it is not a mocked transport test.
 
 The OpenRTC package is consumed from npm by default so this repo can be cloned
 and developed without the full workspace. Workspace-local OpenRTC SDK changes
