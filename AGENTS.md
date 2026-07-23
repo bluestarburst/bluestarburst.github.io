@@ -46,6 +46,7 @@ logic lives in `app/components/sharedCursorsRooms.ts` and is unit-tested.
 This workspace uses canonical tiers `local` / `dev` / `staging` / `prod`
 (see `../env/README.md` from the workspace root). Select a tier with
 `npm run env:use -- <tier>` at the workspace root and diagnose with
-`npm run env:doctor`. For OpenRTC emulator wiring (ports, seeded test
-identity, emulator env vars) import from `openrtc/env` instead of copying
-constants.
+`npm run env:doctor`. Those are internal workspace orchestration tiers. The
+portfolio is a standalone consumer and uses published packages plus the
+managed public OpenRTC service. Only a named workspace platform test may import
+the internal `openrtc/env` helper.
