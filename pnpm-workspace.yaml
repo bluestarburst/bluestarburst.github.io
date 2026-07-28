@@ -7,3 +7,6 @@ allowBuilds:
   onnxruntime-node: true
   protobufjs: true
   sharp: true
+
+minimumReleaseAgeExclude:
+  - openrtc@1.0.12
