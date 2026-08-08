@@ -43,10 +43,14 @@ logic lives in `app/components/sharedCursorsRooms.ts` and is unit-tested.
 
 ## Environments
 
-This workspace uses canonical tiers `local` / `dev` / `staging` / `prod`
-(see `../env/README.md` from the workspace root). Select a tier with
-`npm run env:use -- <tier>` at the workspace root and diagnose with
-`npm run env:doctor`. Those are internal workspace orchestration tiers. The
-portfolio is a standalone consumer and uses published packages plus the
-managed public OpenRTC service. Only a named workspace platform test may import
-the internal `openrtc/env` helper.
+Standalone setup uses `pnpm env:setup -- --tier <dev|staging>` and
+`pnpm env:doctor -- --tier <tier>`, which write `.env.development.local` or
+`.env.staging.local`. Production values belong in GitHub Actions/deployment
+secrets; the script's `--allow-prod-local` option is only for an explicit local
+production smoke. Never route the app through `.env.local`.
+
+The portfolio uses published packages, the managed production OpenRTC service,
+and its own Portfolio identity in every app lane. Only a named workspace
+platform test may import `openrtc/env` or select internal platform
+staging/emulators. Root `npm run env:use` remains full-workspace orchestration,
+not a standalone portfolio command.
