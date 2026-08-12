@@ -1,90 +1,73 @@
 /**
- * Pure room-selection logic for the shared-cursors demo.
- *
- * Extracted from `SharedCursors.tsx` so the sharding / join-or-create / retry
- * behaviour can be unit-tested without a live OpenRTC client. The component
- * injects the real `OpenRTCClient` (which structurally satisfies
- * `RoomClientLike`); tests inject a mock.
+ * Pure live-space sharding for the public cursor demo. Unlike the retired
+ * room flow, joining a shard never creates durable membership or an Auth user.
  */
 
-export const ROOM_PREFIX = 'PORTFOLIO-CURSORS';
-export const ROOM_SHARDS = 12;
+export const SPACE_PREFIX = 'portfolio-cursors';
+export const SPACE_SHARDS = 12;
 
-/** Minimal slice of the OpenRTC client this module needs. */
-export interface RoomClientLike<C> {
-  joinRoom(roomId: string, options?: { bootstrapPeers?: boolean }): Promise<C[]>;
-  createRoom(roomId: string): Promise<string>;
+export interface SpaceClientLike<S> {
+  spaces: {
+    join(
+      id: string,
+      options: {
+        access: 'capability';
+        identity: 'ephemeral';
+        payload: 'latest-state';
+        maxPeers: number;
+      },
+    ): Promise<S>;
+  };
 }
 
-export function getRoomId(shard: number, prefix: string = ROOM_PREFIX): string {
+export function getSpaceId(shard: number, prefix: string = SPACE_PREFIX): string {
+  if (!Number.isInteger(shard) || shard < 0) throw new Error('Space shard must be a non-negative integer.');
   return `${prefix}-${shard}`;
 }
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-export function isRoomNotFoundError(error: unknown): boolean {
-  return /room not found|not found|404/i.test(messageOf(error));
-}
-
-export function isRoomExistsError(error: unknown): boolean {
-  return /already exists|409/i.test(messageOf(error));
-}
-
-export function isRoomFullError(error: unknown): boolean {
-  const message = messageOf(error);
-  return /room is full|resource-exhausted|429/i.test(message) || /full \(\d+\/\d+ members\)/i.test(message);
+export function isSpaceFullError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /space is full|resource-exhausted|budget-exhausted|429|capacity/i.test(message);
 }
 
 /**
- * Join a room, creating it first if it does not exist yet. A concurrent create
- * (another peer won the race) is treated as success.
+ * Walk live-only capability shards from a caller-selected starting point.
+ * The server remains authoritative for capacity and budget admission.
  */
-export async function joinOrCreateRoomOnce<C>(client: RoomClientLike<C>, roomId: string): Promise<C[]> {
-  try {
-    return await client.joinRoom(roomId, { bootstrapPeers: false });
-  } catch (joinError) {
-    if (!isRoomNotFoundError(joinError)) {
-      throw joinError;
-    }
+export async function joinAvailableSpace<S>(
+  client: SpaceClientLike<S>,
+  options: {
+    shards?: number;
+    prefix?: string;
+    startShard?: number;
+    maxPeers?: number;
+  } = {},
+): Promise<{ spaceId: string; space: S }> {
+  const shards = options.shards ?? SPACE_SHARDS;
+  // Fill shards in a stable order so visitors who arrive together actually
+  // share a cursor space. Random starts silently partitioned otherwise healthy
+  // visitors across different avenues and multiplied idle coordination state.
+  const startShard = options.startShard ?? 0;
+  const maxPeers = options.maxPeers ?? 24;
+  if (!Number.isInteger(shards) || shards < 1) throw new Error('At least one cursor shard is required.');
 
-    try {
-      await client.createRoom(roomId);
-    } catch (createError) {
-      if (!isRoomExistsError(createError)) {
-        throw createError;
-      }
-    }
-
-    return client.joinRoom(roomId, { bootstrapPeers: false });
-  }
-}
-
-/**
- * Walk the room shards, joining the first one that has capacity. Full rooms are
- * skipped; any other error aborts immediately.
- */
-export async function joinAvailableRoom<C>(
-  client: RoomClientLike<C>,
-  options: { shards?: number; prefix?: string } = {},
-): Promise<{ roomId: string; connections: C[] }> {
-  const shards = options.shards ?? ROOM_SHARDS;
   let lastError: unknown = null;
-
   for (let attempt = 0; attempt < shards; attempt += 1) {
-    const roomId = getRoomId(attempt, options.prefix);
-
+    const shard = (startShard + attempt) % shards;
+    const spaceId = getSpaceId(shard, options.prefix);
     try {
-      const connections = await joinOrCreateRoomOnce(client, roomId);
-      return { roomId, connections };
+      const space = await client.spaces.join(spaceId, {
+        access: 'capability',
+        identity: 'ephemeral',
+        payload: 'latest-state',
+        maxPeers,
+      });
+      return { spaceId, space };
     } catch (error) {
       lastError = error;
-      if (!isRoomFullError(error)) {
-        throw error;
-      }
+      if (!isSpaceFullError(error)) throw error;
     }
   }
 
-  throw lastError ?? new Error('All shared cursor rooms are full.');
+  throw lastError ?? new Error('All shared cursor spaces are full.');
 }

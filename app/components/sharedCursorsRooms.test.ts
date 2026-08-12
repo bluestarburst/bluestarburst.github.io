@@ -1,140 +1,89 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
-  getRoomId,
-  isRoomExistsError,
-  isRoomFullError,
-  isRoomNotFoundError,
-  joinAvailableRoom,
-  joinOrCreateRoomOnce,
-  ROOM_PREFIX,
-  type RoomClientLike,
+  getSpaceId,
+  isSpaceFullError,
+  joinAvailableSpace,
+  SPACE_PREFIX,
+  type SpaceClientLike,
 } from './sharedCursorsRooms';
 
-type Conn = { id: string };
+type Space = { id: string };
 
-function mockClient(overrides: Partial<RoomClientLike<Conn>> = {}): RoomClientLike<Conn> {
-  return {
-    joinRoom: vi.fn(async () => [] as Conn[]),
-    createRoom: vi.fn(async () => 'room'),
-    ...overrides,
-  };
+function mockClient(join: SpaceClientLike<Space>['spaces']['join']): SpaceClientLike<Space> {
+  return { spaces: { join } };
 }
 
-describe('getRoomId', () => {
-  it('formats the shard with the default prefix', () => {
-    expect(getRoomId(0)).toBe(`${ROOM_PREFIX}-0`);
-    expect(getRoomId(11)).toBe(`${ROOM_PREFIX}-11`);
+describe('cursor capability-space sharding', () => {
+  it('keeps public cursor peers in the manifest-gated relay privacy path', () => {
+    const component = readFileSync(
+      new URL('./SharedCursors.tsx', import.meta.url),
+      'utf8',
+    );
+    expect(component).toContain('relay: true');
+    expect(component).toContain("privacy: 'relay-only'");
+    expect(component).toContain("priority: ['webrtc', 'iroh']");
   });
 
-  it('honours a custom prefix', () => {
-    expect(getRoomId(3, 'TEST')).toBe('TEST-3');
-  });
-});
-
-describe('error classifiers', () => {
-  it('detects not-found errors', () => {
-    expect(isRoomNotFoundError(new Error('Room not found'))).toBe(true);
-    expect(isRoomNotFoundError(new Error('HTTP 404'))).toBe(true);
-    expect(isRoomNotFoundError(new Error('room is full'))).toBe(false);
+  it('formats bounded live-space shard IDs', () => {
+    expect(getSpaceId(0)).toBe(`${SPACE_PREFIX}-0`);
+    expect(getSpaceId(11)).toBe(`${SPACE_PREFIX}-11`);
+    expect(() => getSpaceId(-1)).toThrow(/non-negative/);
   });
 
-  it('detects already-exists errors', () => {
-    expect(isRoomExistsError(new Error('Room already exists'))).toBe(true);
-    expect(isRoomExistsError('409 conflict')).toBe(true);
-    expect(isRoomExistsError(new Error('nope'))).toBe(false);
+  it('classifies only capacity and budget admission failures as shard-full', () => {
+    expect(isSpaceFullError(new Error('space is full'))).toBe(true);
+    expect(isSpaceFullError(new Error('budget-exhausted'))).toBe(true);
+    expect(isSpaceFullError(new Error('HTTP 429'))).toBe(true);
+    expect(isSpaceFullError(new Error('unauthorized'))).toBe(false);
   });
 
-  it('detects room-full errors including the members form', () => {
-    expect(isRoomFullError(new Error('room is full'))).toBe(true);
-    expect(isRoomFullError(new Error('resource-exhausted'))).toBe(true);
-    expect(isRoomFullError(new Error('429 too many'))).toBe(true);
-    expect(isRoomFullError(new Error('full (8/8 members)'))).toBe(true);
-    expect(isRoomFullError(new Error('room not found'))).toBe(false);
-  });
-});
-
-describe('joinOrCreateRoomOnce', () => {
-  it('joins an existing room directly', async () => {
-    const conns = [{ id: 'a' }];
-    const client = mockClient({ joinRoom: vi.fn(async () => conns) });
-    await expect(joinOrCreateRoomOnce(client, 'r')).resolves.toBe(conns);
-    expect(client.createRoom).not.toHaveBeenCalled();
-    expect(client.joinRoom).toHaveBeenCalledWith('r', { bootstrapPeers: false });
-  });
-
-  it('creates then joins when the room does not exist', async () => {
-    const conns = [{ id: 'b' }];
-    const joinRoom = vi
-      .fn<RoomClientLike<Conn>['joinRoom']>()
-      .mockRejectedValueOnce(new Error('room not found'))
-      .mockResolvedValueOnce(conns);
-    const client = mockClient({ joinRoom });
-    await expect(joinOrCreateRoomOnce(client, 'r')).resolves.toBe(conns);
-    expect(client.createRoom).toHaveBeenCalledWith('r');
-    expect(joinRoom).toHaveBeenCalledTimes(2);
-  });
-
-  it('tolerates a concurrent create (already exists) and still joins', async () => {
-    const conns = [{ id: 'c' }];
-    const joinRoom = vi
-      .fn<RoomClientLike<Conn>['joinRoom']>()
-      .mockRejectedValueOnce(new Error('not found'))
-      .mockResolvedValueOnce(conns);
-    const createRoom = vi.fn(async () => {
-      throw new Error('Room already exists');
+  it('joins one ephemeral latest-state capability space', async () => {
+    const join = vi.fn(async (id: string) => ({ id }));
+    const result = await joinAvailableSpace(mockClient(join), {
+      prefix: 'cursor',
+      shards: 4,
+      startShard: 2,
+      maxPeers: 16,
     });
-    const client = mockClient({ joinRoom, createRoom });
-    await expect(joinOrCreateRoomOnce(client, 'r')).resolves.toBe(conns);
-    expect(joinRoom).toHaveBeenCalledTimes(2);
-  });
-
-  it('rethrows a non-not-found join error without creating', async () => {
-    const client = mockClient({
-      joinRoom: vi.fn(async () => {
-        throw new Error('boom');
-      }),
+    expect(result).toEqual({ spaceId: 'cursor-2', space: { id: 'cursor-2' } });
+    expect(join).toHaveBeenCalledWith('cursor-2', {
+      access: 'capability',
+      identity: 'ephemeral',
+      payload: 'latest-state',
+      maxPeers: 16,
     });
-    await expect(joinOrCreateRoomOnce(client, 'r')).rejects.toThrow('boom');
-    expect(client.createRoom).not.toHaveBeenCalled();
-  });
-});
-
-describe('joinAvailableRoom', () => {
-  it('returns the first room with capacity', async () => {
-    const conns = [{ id: 'x' }];
-    const client = mockClient({ joinRoom: vi.fn(async () => conns) });
-    const result = await joinAvailableRoom(client, { shards: 4, prefix: 'P' });
-    expect(result).toEqual({ roomId: 'P-0', connections: conns });
   });
 
-  it('skips full rooms and joins the next available shard', async () => {
-    const conns = [{ id: 'y' }];
-    const joinRoom = vi
-      .fn<RoomClientLike<Conn>['joinRoom']>()
-      .mockRejectedValueOnce(new Error('room is full'))
-      .mockRejectedValueOnce(new Error('full (8/8 members)'))
-      .mockResolvedValueOnce(conns);
-    const client = mockClient({ joinRoom });
-    const result = await joinAvailableRoom(client, { shards: 5, prefix: 'P' });
-    expect(result).toEqual({ roomId: 'P-2', connections: conns });
-    expect(joinRoom).toHaveBeenCalledTimes(3);
+  it('starts at the first shard so contemporaneous visitors share one avenue', async () => {
+    const join = vi.fn(async (id: string) => ({ id }));
+    const result = await joinAvailableSpace(mockClient(join), { shards: 4 });
+    expect(result.spaceId).toBe('portfolio-cursors-0');
+    expect(join).toHaveBeenCalledTimes(1);
   });
 
-  it('throws when every shard is full', async () => {
-    const client = mockClient({
-      joinRoom: vi.fn(async () => {
-        throw new Error('room is full');
-      }),
+  it('walks to the next shard after a bounded capacity denial', async () => {
+    const join = vi.fn()
+      .mockRejectedValueOnce(new Error('space is full'))
+      .mockResolvedValueOnce({ id: 'cursor-0' });
+    const result = await joinAvailableSpace(mockClient(join), {
+      prefix: 'cursor',
+      shards: 3,
+      startShard: 2,
     });
-    await expect(joinAvailableRoom(client, { shards: 3 })).rejects.toThrow(/full/i);
+    expect(result.spaceId).toBe('cursor-0');
+    expect(join).toHaveBeenCalledTimes(2);
   });
 
-  it('aborts immediately on a non-full error', async () => {
-    const joinRoom = vi.fn(async () => {
-      throw new Error('unauthorized');
-    });
-    const client = mockClient({ joinRoom });
-    await expect(joinAvailableRoom(client, { shards: 6 })).rejects.toThrow('unauthorized');
-    expect(joinRoom).toHaveBeenCalledTimes(1);
+  it('fails immediately on trust errors and after all shards are full', async () => {
+    const denied = vi.fn(async () => { throw new Error('unauthorized'); });
+    await expect(joinAvailableSpace(mockClient(denied), { shards: 4, startShard: 0 }))
+      .rejects.toThrow('unauthorized');
+    expect(denied).toHaveBeenCalledTimes(1);
+
+    const full = vi.fn(async () => { throw new Error('resource-exhausted'); });
+    await expect(joinAvailableSpace(mockClient(full), { shards: 3, startShard: 0 }))
+      .rejects.toThrow('resource-exhausted');
+    expect(full).toHaveBeenCalledTimes(3);
   });
 });

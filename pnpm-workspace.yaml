@@ -9,4 +9,4 @@ allowBuilds:
   sharp: true
 
 minimumReleaseAgeExclude:
-  - openrtc@1.0.16
+  - openrtc@2.0.0-rc.1
