@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { OpenRTC, spaceToken, type OpenRTCClient } from 'openrtc';
+import { OpenRTC, type OpenRTCClient, type OpenRTCSpaceHandle } from 'openrtc';
 import { AsciiBackground } from './AsciiBackground';
 import { StarField, SpaceDebris } from './ThreeElements';
 import { useTheme } from './ThemeContext';
-import { joinAvailableRoom } from './sharedCursorsRooms';
+import { joinAvailableSpace } from './sharedCursorsRooms';
 
 const API_KEY = (import.meta.env.VITE_OPENRTC_API_KEY ?? '').trim();
 
@@ -25,16 +25,15 @@ export function SharedCursors() {
     const [status, setStatus] = useState('Initializing...');
     const [activeMemberCount, setActiveMemberCount] = useState(0);
 
-    type RoomConnection = Awaited<ReturnType<OpenRTCClient['joinRoom']>>[number];
+    type SpaceConnection = ReturnType<OpenRTCSpaceHandle['diagnostics']['connections']>[number];
 
     const clientRef = useRef<OpenRTCClient | null>(null);
+    const spaceRef = useRef<OpenRTCSpaceHandle | null>(null);
     const myColor = useRef(getRandomColor());
-    const connectionsRef = useRef<RoomConnection[]>([]);
+    const connectionsRef = useRef<SpaceConnection[]>([]);
     const mountedRef = useRef(true);
-    const activeRoomIdRef = useRef<string | null>(null);
-    const stopRoomWatchRef = useRef<(() => void) | null>(null);
-    const pendingRoomDialsRef = useRef<Set<string>>(new Set());
-    const failedRoomDialsRef = useRef<Map<string, number>>(new Map());
+    const activeSpaceIdRef = useRef<string | null>(null);
+    const capabilityStopsRef = useRef<Array<() => void>>([]);
     const cursorSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const latestCursorPayloadRef = useRef<CursorPosition | null>(null);
     const [myMousePosition, setMyMousePosition] = useState({ x: 0, z: 0 });
@@ -59,65 +58,36 @@ export function SharedCursors() {
 
                 const client = OpenRTC({
                     apiKey: API_KEY,
-                    discoveryMode: 'space',
-                    space: 'portfolio-cursors',
-                    storagePrefix: 'portfolio-cursors',
-                    nodeIdPersistence: 'ephemeral',
-                    strictMode: true,
-                    spaceTokenProvider: spaceToken({
-                        apiKey: API_KEY,
-                        space: 'portfolio-cursors',
-                        memberIdStorageKey: 'portfolio-cursors:member-id',
-                    }),
                     transports: {
-                        webrtc: { privacyMode: true },
-                        iroh: {
-                            persistenceMode: 'ephemeral',
-                            relayOnly: true,
-                        },
+                        iroh: true,
+                        webrtc: true,
+                        relay: true,
+                        privacy: 'relay-only',
+                        priority: ['webrtc', 'iroh'],
                     },
                 });
-                await client.connect();
+                const { spaceId, space } = await joinAvailableSpace(client);
 
-                if (!mountedRef.current) return;
+                if (!mountedRef.current) {
+                    await space.leave();
+                    await client.close();
+                    return;
+                }
                 clientRef.current = client;
-
-                client.onConnection((conn: RoomConnection) => {
-                    if (mountedRef.current) setupConnection(conn);
-                });
-
-                const { roomId, connections } = await joinAvailableRoom(client);
-
-                if (!mountedRef.current) return;
-                activeRoomIdRef.current = roomId;
+                spaceRef.current = space;
+                activeSpaceIdRef.current = spaceId;
                 setStatus('Joined');
 
-                connections.forEach((conn: RoomConnection) => setupConnection(conn));
+                space.diagnostics.connections().forEach((conn) => setupConnection(conn));
+                capabilityStopsRef.current = [
+                    space.diagnostics.onConnection((conn) => {
+                        if (mountedRef.current) setupConnection(conn);
+                    }),
+                    space.peers.watch(() => {
+                        if (mountedRef.current) updateMemberCount();
+                    }),
+                ];
                 updateMemberCount();
-
-                const localNodeId = await client.advanced.nodeId().catch(() => null);
-                stopRoomWatchRef.current = client.watchRoom(roomId, (members: Array<{ nodeId?: string; ticket?: string }>) => {
-                    const now = Date.now();
-                    members.forEach((member: { nodeId?: string; ticket?: string }) => {
-                        const nodeId = member.nodeId?.trim();
-                        const ticket = member.ticket?.trim();
-                        if (!nodeId || !ticket || nodeId === localNodeId) return;
-                        if (connectionsRef.current.some((conn) => conn.remoteNodeId === nodeId)) return;
-                        if (pendingRoomDialsRef.current.has(nodeId)) return;
-                        if ((failedRoomDialsRef.current.get(nodeId) ?? 0) > now) return;
-
-                        pendingRoomDialsRef.current.add(nodeId);
-                        client.peers.connect({ deviceId: nodeId, ticket })
-                            .then((conn: RoomConnection) => {
-                                failedRoomDialsRef.current.delete(nodeId);
-                                if (mountedRef.current) setupConnection(conn);
-                            })
-                            .catch(() => {
-                                failedRoomDialsRef.current.set(nodeId, Date.now() + 60_000);
-                            })
-                            .finally(() => pendingRoomDialsRef.current.delete(nodeId));
-                    });
-                });
 
             } catch (err: any) {
                 console.error("Failed to init SharedCursors:", err);
@@ -129,16 +99,14 @@ export function SharedCursors() {
 
         return () => {
             mountedRef.current = false;
-            stopRoomWatchRef.current?.();
-            stopRoomWatchRef.current = null;
-            const activeRoomId = activeRoomIdRef.current;
-            if (activeRoomId) clientRef.current?.leaveRoom(activeRoomId).catch(() => {});
-            activeRoomIdRef.current = null;
-            clientRef.current?.disconnect();
+            capabilityStopsRef.current.splice(0).forEach((stop) => stop());
+            activeSpaceIdRef.current = null;
+            void spaceRef.current?.leave().catch(() => {});
+            spaceRef.current = null;
+            void clientRef.current?.close().catch(() => {});
+            clientRef.current = null;
             connectionsRef.current.forEach(c => c.disconnect());
             connectionsRef.current = [];
-            pendingRoomDialsRef.current.clear();
-            failedRoomDialsRef.current.clear();
             if (cursorSendTimerRef.current) {
                 clearTimeout(cursorSendTimerRef.current);
                 cursorSendTimerRef.current = null;
@@ -147,7 +115,7 @@ export function SharedCursors() {
         };
     }, []);
 
-    const setupConnection = (conn: RoomConnection) => {
+    const setupConnection = (conn: SpaceConnection) => {
         if (connectionsRef.current.find(c => c.id === conn.id)) return;
 
         connectionsRef.current.push(conn);
