@@ -60,6 +60,7 @@ describe('cursor capability-space sharding', () => {
     const result = await joinAvailableSpace(mockClient(join), { shards: 4 });
     expect(result.spaceId).toBe('portfolio-cursors-0');
     expect(join).toHaveBeenCalledTimes(1);
+    expect(join).toHaveBeenCalledWith('portfolio-cursors-0', expect.objectContaining({ maxPeers: 8 }));
   });
 
   it('walks to the next shard after a bounded capacity denial', async () => {
