@@ -48,7 +48,10 @@ export async function joinAvailableSpace<S>(
   // share a cursor space. Random starts silently partitioned otherwise healthy
   // visitors across different avenues and multiplied idle coordination state.
   const startShard = options.startShard ?? 0;
-  const maxPeers = options.maxPeers ?? 24;
+  // OpenRTC 2.0 RC spaces admit eight peers by default. More than eight is an
+  // operator-reviewed capability, so the public cursor demo scales through
+  // bounded shards instead of silently requesting advanced fan-out.
+  const maxPeers = options.maxPeers ?? 8;
   if (!Number.isInteger(shards) || shards < 1) throw new Error('At least one cursor shard is required.');
 
   let lastError: unknown = null;
