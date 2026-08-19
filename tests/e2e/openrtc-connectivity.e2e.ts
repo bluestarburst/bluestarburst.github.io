@@ -62,3 +62,29 @@ test('two independent portfolio devices connect and exchange cursor payloads', a
     await Promise.all([leftContext.close(), rightContext.close()]);
   }
 });
+
+test('two pages sharing one browser device exchange cursors locally', async ({ browser }) => {
+  const context = await browser.newContext();
+
+  try {
+    const left = await openPortfolioPeer(context, 'same-device-left');
+    const right = await openPortfolioPeer(context, 'same-device-right');
+    const leftPresence = left.getByTestId('openrtc-presence');
+    const rightPresence = right.getByTestId('openrtc-presence');
+
+    await expect.poll(async () => Number(await leftPresence.getAttribute('data-local-tab-peer-count')))
+      .toBeGreaterThanOrEqual(1);
+    await expect.poll(async () => Number(await rightPresence.getAttribute('data-local-tab-peer-count')))
+      .toBeGreaterThanOrEqual(1);
+
+    await moveCursor(left, 0.25, 0.35);
+    await expect.poll(async () => Number(await rightPresence.getAttribute('data-remote-cursor-count')))
+      .toBeGreaterThanOrEqual(1);
+
+    await moveCursor(right, 0.75, 0.65);
+    await expect.poll(async () => Number(await leftPresence.getAttribute('data-remote-cursor-count')))
+      .toBeGreaterThanOrEqual(1);
+  } finally {
+    await context.close();
+  }
+});
