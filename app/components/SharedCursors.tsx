@@ -12,6 +12,10 @@ interface CursorPosition {
     z: number;
     color: string;
 }
+interface CursorMessage {
+    type: 'cursor';
+    payload: CursorPosition;
+}
 
 const COLORS = [
     '#FF5733', '#33FF57', '#3357FF', '#FF33A1', '#33FFF5',
@@ -20,34 +24,68 @@ const COLORS = [
 
 const getRandomColor = () => COLORS[Math.floor(Math.random() * COLORS.length)];
 
+function isCursorMessage(value: unknown): value is CursorMessage {
+    if (!value || typeof value !== 'object') return false;
+    const message = value as { type?: unknown; payload?: Record<string, unknown> };
+    const payload = message.payload;
+    return message.type === 'cursor'
+        && !!payload
+        && typeof payload.x === 'number'
+        && Number.isFinite(payload.x)
+        && typeof payload.z === 'number'
+        && Number.isFinite(payload.z)
+        && typeof payload.color === 'string'
+        && COLORS.includes(payload.color);
+}
+
 export function SharedCursors() {
+    type SpaceConnection = ReturnType<OpenRTCSpaceHandle['diagnostics']['connections']>[number];
+
     const [cursors, setCursors] = useState<Record<string, CursorPosition>>({});
     const [status, setStatus] = useState('Initializing...');
     const [activeMemberCount, setActiveMemberCount] = useState(0);
-
-    type SpaceConnection = ReturnType<OpenRTCSpaceHandle['diagnostics']['connections']>[number];
-
+    const [myMousePosition, setMyMousePosition] = useState({ x: 0, z: 0 });
     const clientRef = useRef<OpenRTCClient | null>(null);
     const spaceRef = useRef<OpenRTCSpaceHandle | null>(null);
     const myColor = useRef(getRandomColor());
-    const connectionsRef = useRef<SpaceConnection[]>([]);
     const mountedRef = useRef(true);
-    const activeSpaceIdRef = useRef<string | null>(null);
+    const wiredConnectionIdsRef = useRef(new Set<string>());
     const capabilityStopsRef = useRef<Array<() => void>>([]);
     const cursorSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const latestCursorPayloadRef = useRef<CursorPosition | null>(null);
-    const [myMousePosition, setMyMousePosition] = useState({ x: 0, z: 0 });
     const { theme } = useTheme();
-
-    const updateMemberCount = () => {
-        const peers = new Set(
-            connectionsRef.current.map((conn) => conn.remoteNodeId?.trim() || conn.id),
-        );
-        setActiveMemberCount(peers.size + 1);
-    };
 
     useEffect(() => {
         mountedRef.current = true;
+
+        const setupConnection = (connection: SpaceConnection) => {
+            if (wiredConnectionIdsRef.current.has(connection.id)) return;
+            wiredConnectionIdsRef.current.add(connection.id);
+            const peerKey = connection.remoteNodeId?.trim() || connection.id;
+
+            connection.onMessage((message: unknown) => {
+                if (!mountedRef.current || !isCursorMessage(message)) return;
+                setCursors((previous) => ({
+                    ...previous,
+                    [peerKey]: message.payload,
+                }));
+            });
+
+            connection.onDisconnect(() => {
+                wiredConnectionIdsRef.current.delete(connection.id);
+                if (!mountedRef.current) return;
+                setCursors((previous) => {
+                    const next = { ...previous };
+                    delete next[peerKey];
+                    return next;
+                });
+            });
+
+            const latestPayload = latestCursorPayloadRef.current;
+            if (latestPayload) {
+                void connection.send({ type: 'cursor', payload: latestPayload }).catch(() => {});
+            }
+        };
 
         const init = async () => {
             try {
@@ -66,113 +104,83 @@ export function SharedCursors() {
                         priority: ['webrtc', 'iroh'],
                     },
                 });
-                const { spaceId, space } = await joinAvailableSpace(client);
+                const { space } = await joinAvailableSpace(client);
 
                 if (!mountedRef.current) {
                     await space.leave();
                     await client.close();
                     return;
                 }
+
                 clientRef.current = client;
                 spaceRef.current = space;
-                activeSpaceIdRef.current = spaceId;
                 setStatus('Joined');
-
-                space.diagnostics.connections().forEach((conn) => setupConnection(conn));
+                space.diagnostics.connections().forEach(setupConnection);
                 capabilityStopsRef.current = [
-                    space.diagnostics.onConnection((conn) => {
-                        if (mountedRef.current) setupConnection(conn);
+                    space.diagnostics.onConnection((connection) => {
+                        if (mountedRef.current) setupConnection(connection);
                     }),
-                    space.peers.watch(() => {
-                        if (mountedRef.current) updateMemberCount();
+                    space.peers.watch((peers) => {
+                        if (!mountedRef.current) return;
+                        setActiveMemberCount(
+                            peers.filter((peer) => peer.status === 'connected').length + 1,
+                        );
                     }),
                 ];
-                updateMemberCount();
-
-            } catch (err: any) {
-                console.error("Failed to init SharedCursors:", err);
-                if (mountedRef.current) setStatus(`Error`);
+            } catch (error) {
+                console.error('Failed to init SharedCursors:', error);
+                if (mountedRef.current) setStatus('Error');
             }
         };
 
-        init();
+        void init();
 
         return () => {
             mountedRef.current = false;
             capabilityStopsRef.current.splice(0).forEach((stop) => stop());
-            activeSpaceIdRef.current = null;
+            wiredConnectionIdsRef.current.clear();
+            if (cursorSendTimerRef.current) clearTimeout(cursorSendTimerRef.current);
+            cursorSendTimerRef.current = null;
+            latestCursorPayloadRef.current = null;
             void spaceRef.current?.leave().catch(() => {});
             spaceRef.current = null;
             void clientRef.current?.close().catch(() => {});
             clientRef.current = null;
-            connectionsRef.current.forEach(c => c.disconnect());
-            connectionsRef.current = [];
-            if (cursorSendTimerRef.current) {
-                clearTimeout(cursorSendTimerRef.current);
-                cursorSendTimerRef.current = null;
-            }
-            latestCursorPayloadRef.current = null;
         };
     }, []);
-
-    const setupConnection = (conn: SpaceConnection) => {
-        if (connectionsRef.current.find(c => c.id === conn.id)) return;
-
-        connectionsRef.current.push(conn);
-        updateMemberCount();
-
-        conn.onMessage((msg: any) => {
-            if (!mountedRef.current) return;
-            if (msg && typeof msg === 'object' && msg.type === 'cursor') {
-                setCursors(prev => ({
-                    ...prev,
-                    [conn.id]: msg.payload
-                }));
-            }
-        });
-
-        conn.onDisconnect(() => {
-            connectionsRef.current = connectionsRef.current.filter(c => c.id !== conn.id);
-            if (mountedRef.current) {
-                updateMemberCount();
-                setCursors(prev => {
-                    const newCursors = { ...prev };
-                    delete newCursors[conn.id];
-                    return newCursors;
-                });
-            }
-        });
-    };
 
     const handleProjectedCursorMove = (position: { x: number; z: number }) => {
         const payload = {
             x: position.x,
             z: position.z,
-            color: myColor.current
+            color: myColor.current,
         };
 
         setMyMousePosition(payload);
         latestCursorPayloadRef.current = payload;
-
         if (cursorSendTimerRef.current) return;
         cursorSendTimerRef.current = setTimeout(() => {
             cursorSendTimerRef.current = null;
             const latestPayload = latestCursorPayloadRef.current;
-            if (!mountedRef.current || !latestPayload) return;
-            connectionsRef.current.forEach(conn => {
-                conn.send({ type: 'cursor', payload: latestPayload }).catch(() => { });
+            const space = spaceRef.current;
+            if (!mountedRef.current || !latestPayload || !space) return;
+
+            // The space owns route replacement. Read the current projection for
+            // every send instead of retaining connection wrappers across epochs.
+            space.diagnostics.connections().forEach((connection) => {
+                void connection.send({ type: 'cursor', payload: latestPayload }).catch(() => {});
             });
         }, 50);
     };
 
     return (
         <>
-            {/* Active Cursors Count UI */}
             <div className="fixed bottom-4 right-4 z-9999 pointer-events-none">
                 <div
                     aria-label={`OpenRTC ${status}: ${activeMemberCount} active cursors`}
                     className="px-3 py-1.5 bg-black/80 backdrop-blur rounded-full text-[10px] font-bold text-white border border-white/10 shadow-lg flex items-center gap-2"
                     data-openrtc-status={status}
+                    data-active-member-count={activeMemberCount}
                     data-remote-cursor-count={Object.keys(cursors).length}
                     data-testid="openrtc-presence"
                 >
@@ -181,28 +189,19 @@ export function SharedCursors() {
                 </div>
             </div>
 
-            {/* Remote Cursors are now rendered in the 3D scene via AsciiBackground */}
-
             <AsciiBackground positions={[
                 ...Object.entries(cursors).map(([peerId, { x, z, color }]) => ({
                     x,
                     z,
                     color,
-                    name: peerId.slice(0, 4)
+                    name: peerId.slice(0, 4),
                 })),
-                { x: myMousePosition.x, z: myMousePosition.z, color: myColor.current, name: 'You' }
+                { x: myMousePosition.x, z: myMousePosition.z, color: myColor.current, name: 'You' },
             ]} onCursorMove={handleProjectedCursorMove}>
                 <ambientLight intensity={0.5} />
                 <pointLight position={[10, 10, 10]} intensity={1} color="#d2b48c" />
-
                 <StarField theme={theme} />
-
-                {/* Dynamically generated space debris along camera path */}
                 <SpaceDebris theme={theme} />
-
-                {/* Keep a few manual ones for specific foreground framing if desired */}
-                {/* <FloatingGeometry position={[-4, 2, -5]} color="#d2b48c" geometryType="icosahedron" />
-                <FloatingGeometry position={[4, -2, -3]} color="#a0a0a0" geometryType="octahedron" /> */}
             </AsciiBackground>
         </>
     );
