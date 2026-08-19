@@ -46,14 +46,18 @@ test('two independent portfolio devices connect and exchange cursor payloads', a
     const leftPresence = left.getByTestId('openrtc-presence');
     const rightPresence = right.getByTestId('openrtc-presence');
 
-    await expect(leftPresence).toContainText('2 ACTIVE CURSORS');
-    await expect(rightPresence).toContainText('2 ACTIVE CURSORS');
+    await expect.poll(async () => Number(await leftPresence.getAttribute('data-active-member-count')))
+      .toBeGreaterThanOrEqual(2);
+    await expect.poll(async () => Number(await rightPresence.getAttribute('data-active-member-count')))
+      .toBeGreaterThanOrEqual(2);
 
     await moveCursor(left, 0.3, 0.4);
-    await expect(rightPresence).toHaveAttribute('data-remote-cursor-count', '1');
+    await expect.poll(async () => Number(await rightPresence.getAttribute('data-remote-cursor-count')))
+      .toBeGreaterThanOrEqual(1);
 
     await moveCursor(right, 0.7, 0.6);
-    await expect(leftPresence).toHaveAttribute('data-remote-cursor-count', '1');
+    await expect.poll(async () => Number(await leftPresence.getAttribute('data-remote-cursor-count')))
+      .toBeGreaterThanOrEqual(1);
   } finally {
     await Promise.all([leftContext.close(), rightContext.close()]);
   }

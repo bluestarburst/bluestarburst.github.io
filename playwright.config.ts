@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const apiKey = (process.env.VITE_OPENRTC_API_KEY ?? '').trim();
+const externalBaseURL = process.env.PORTFOLIO_BASE_URL?.trim();
 
 if (!/^pk_live_/.test(apiKey)) {
   throw new Error(
@@ -20,7 +21,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['line']] : 'line',
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: externalBaseURL || 'http://127.0.0.1:4173',
     trace: 'retain-on-failure',
     video: 'retain-on-failure',
   },
@@ -32,7 +33,7 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
+  webServer: externalBaseURL ? undefined : {
     command: 'pnpm build && pnpm exec vite preview --host 127.0.0.1 --port 4173',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: false,
