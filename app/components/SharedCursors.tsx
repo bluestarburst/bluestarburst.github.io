@@ -13,8 +13,9 @@ interface CursorPosition {
     color: string;
 }
 interface CursorMessage {
-    type: 'cursor';
-    payload: CursorPosition;
+    sender?: string;
+    type: 'cursor' | 'cursor_leave' | 'hello' | 'hello_ack';
+    payload?: CursorPosition;
 }
 
 const COLORS = [
@@ -23,12 +24,16 @@ const COLORS = [
 ];
 
 const getRandomColor = () => COLORS[Math.floor(Math.random() * COLORS.length)];
+const getInstanceId = () => crypto.randomUUID();
 
-function isCursorMessage(value: unknown): value is CursorMessage {
+function isCursorMessage(
+    value: unknown,
+): value is CursorMessage & { type: 'cursor'; payload: CursorPosition } {
     if (!value || typeof value !== 'object') return false;
-    const message = value as { type?: unknown; payload?: Record<string, unknown> };
+    const message = value as { sender?: unknown; type?: unknown; payload?: Record<string, unknown> };
     const payload = message.payload;
     return message.type === 'cursor'
+        && (message.sender === undefined || typeof message.sender === 'string')
         && !!payload
         && typeof payload.x === 'number'
         && Number.isFinite(payload.x)
@@ -53,10 +58,26 @@ export function SharedCursors() {
     const capabilityStopsRef = useRef<Array<() => void>>([]);
     const cursorSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const latestCursorPayloadRef = useRef<CursorPosition | null>(null);
+    const broadcastRef = useRef<BroadcastChannel | null>(null);
+    const instanceIdRef = useRef(getInstanceId());
+    const localPeerIdsRef = useRef(new Set<string>());
+    const openRtcPeerCountRef = useRef(0);
     const { theme } = useTheme();
 
     useEffect(() => {
         mountedRef.current = true;
+
+        const updateActiveMemberCount = () => {
+            setActiveMemberCount(openRtcPeerCountRef.current + localPeerIdsRef.current.size + 1);
+        };
+
+        const removeCursor = (peerKey: string) => {
+            setCursors((previous) => {
+                const next = { ...previous };
+                delete next[peerKey];
+                return next;
+            });
+        };
 
         const setupConnection = (connection: SpaceConnection) => {
             if (wiredConnectionIdsRef.current.has(connection.id)) return;
@@ -67,18 +88,14 @@ export function SharedCursors() {
                 if (!mountedRef.current || !isCursorMessage(message)) return;
                 setCursors((previous) => ({
                     ...previous,
-                    [peerKey]: message.payload,
+                    [peerKey]: message.payload!,
                 }));
             });
 
             connection.onDisconnect(() => {
                 wiredConnectionIdsRef.current.delete(connection.id);
                 if (!mountedRef.current) return;
-                setCursors((previous) => {
-                    const next = { ...previous };
-                    delete next[peerKey];
-                    return next;
-                });
+                removeCursor(peerKey);
             });
 
             const latestPayload = latestCursorPayloadRef.current;
@@ -122,11 +139,52 @@ export function SharedCursors() {
                     }),
                     space.peers.watch((peers) => {
                         if (!mountedRef.current) return;
-                        setActiveMemberCount(
-                            peers.filter((peer) => peer.status === 'connected').length + 1,
-                        );
+                        openRtcPeerCountRef.current = peers.filter(
+                            (peer) => peer.status === 'connected',
+                        ).length;
+                        updateActiveMemberCount();
                     }),
                 ];
+
+                if (typeof BroadcastChannel !== 'undefined') {
+                    const channel = new BroadcastChannel(`portfolio-cursors:${space.id}`);
+                    broadcastRef.current = channel;
+                    channel.onmessage = (event: MessageEvent<CursorMessage>) => {
+                        const message = event.data;
+                        const sender = message?.sender?.trim();
+                        if (!mountedRef.current || !sender || sender === instanceIdRef.current) return;
+
+                        if (message.type === 'hello' || message.type === 'hello_ack' || isCursorMessage(message)) {
+                            localPeerIdsRef.current.add(sender);
+                            updateActiveMemberCount();
+                        }
+                        if (isCursorMessage(message)) {
+                            setCursors((previous) => ({ ...previous, [sender]: message.payload! }));
+                        } else if (message.type === 'cursor_leave') {
+                            localPeerIdsRef.current.delete(sender);
+                            removeCursor(sender);
+                            updateActiveMemberCount();
+                        }
+                        if (message.type === 'hello') {
+                            channel.postMessage({
+                                sender: instanceIdRef.current,
+                                type: 'hello_ack',
+                            } satisfies CursorMessage);
+                            const latestPayload = latestCursorPayloadRef.current;
+                            if (latestPayload) {
+                                channel.postMessage({
+                                    sender: instanceIdRef.current,
+                                    type: 'cursor',
+                                    payload: latestPayload,
+                                } satisfies CursorMessage);
+                            }
+                        }
+                    };
+                    channel.postMessage({
+                        sender: instanceIdRef.current,
+                        type: 'hello',
+                    } satisfies CursorMessage);
+                }
             } catch (error) {
                 console.error('Failed to init SharedCursors:', error);
                 if (mountedRef.current) setStatus('Error');
@@ -137,6 +195,14 @@ export function SharedCursors() {
 
         return () => {
             mountedRef.current = false;
+            broadcastRef.current?.postMessage({
+                sender: instanceIdRef.current,
+                type: 'cursor_leave',
+            } satisfies CursorMessage);
+            broadcastRef.current?.close();
+            broadcastRef.current = null;
+            localPeerIdsRef.current.clear();
+            openRtcPeerCountRef.current = 0;
             capabilityStopsRef.current.splice(0).forEach((stop) => stop());
             wiredConnectionIdsRef.current.clear();
             if (cursorSendTimerRef.current) clearTimeout(cursorSendTimerRef.current);
@@ -165,10 +231,17 @@ export function SharedCursors() {
             const space = spaceRef.current;
             if (!mountedRef.current || !latestPayload || !space) return;
 
+            const message = {
+                sender: instanceIdRef.current,
+                type: 'cursor',
+                payload: latestPayload,
+            } satisfies CursorMessage;
+            broadcastRef.current?.postMessage(message);
+
             // The space owns route replacement. Read the current projection for
             // every send instead of retaining connection wrappers across epochs.
             space.diagnostics.connections().forEach((connection) => {
-                void connection.send({ type: 'cursor', payload: latestPayload }).catch(() => {});
+                void connection.send(message).catch(() => {});
             });
         }, 50);
     };
@@ -181,6 +254,7 @@ export function SharedCursors() {
                     className="px-3 py-1.5 bg-black/80 backdrop-blur rounded-full text-[10px] font-bold text-white border border-white/10 shadow-lg flex items-center gap-2"
                     data-openrtc-status={status}
                     data-active-member-count={activeMemberCount}
+                    data-local-tab-peer-count={localPeerIdsRef.current.size}
                     data-remote-cursor-count={Object.keys(cursors).length}
                     data-testid="openrtc-presence"
                 >
