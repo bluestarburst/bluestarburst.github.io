@@ -25,14 +25,14 @@ describe('cursor capability-space sharding', () => {
     expect(component).toContain("priority: ['webrtc', 'iroh']");
   });
 
-  it('uses the current v2 space projection without taking over peer lifecycle', () => {
+  it('uses latest-state without taking over peer lifecycle', () => {
     const component = readFileSync(
       new URL('./SharedCursors.tsx', import.meta.url),
       'utf8',
     );
-    expect(component).toContain('space.diagnostics.connections().forEach');
-    expect(component).toContain('latestCursorPayloadRef');
-    expect(component).not.toContain('connectionsRef');
+    expect(component).toContain("space.state<CursorPosition>('cursor')");
+    expect(component).toContain('cursorState.watch');
+    expect(component).not.toContain('space.diagnostics');
     expect(component).not.toContain('.disconnect()');
   });
 

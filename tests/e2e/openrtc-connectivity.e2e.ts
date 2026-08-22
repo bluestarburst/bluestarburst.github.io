@@ -1,5 +1,11 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
+interface CursorPosition {
+  x: number;
+  z: number;
+  color: string;
+}
+
 async function openPortfolioPeer(
   context: BrowserContext,
   label: string,
@@ -36,9 +42,26 @@ async function moveCursor(page: Page, xRatio: number, yRatio: number): Promise<v
   );
 }
 
-test('two independent portfolio devices connect and exchange cursor payloads', async ({ browser }) => {
+async function readCursorAttribute<T>(page: Page, name: string): Promise<T> {
+  const value = await page.getByTestId('openrtc-presence').getAttribute(name);
+  expect(value).not.toBeNull();
+  return JSON.parse(value!) as T;
+}
+
+async function expectExactCursor(source: Page, target: Page): Promise<CursorPosition> {
+  let cursor: CursorPosition | null = null;
+  await expect.poll(async () => {
+    cursor = await readCursorAttribute<CursorPosition>(source, 'data-local-cursor');
+    const remote = await readCursorAttribute<CursorPosition[]>(target, 'data-remote-cursors');
+    return remote.some((candidate) => JSON.stringify(candidate) === JSON.stringify(cursor));
+  }).toBe(true);
+  return cursor!;
+}
+
+test('two independent portfolio devices exchange exact space.state cursor payloads', async ({ browser }) => {
   const leftContext = await browser.newContext();
   const rightContext = await browser.newContext();
+  let leftClosed = false;
 
   try {
     const left = await openPortfolioPeer(leftContext, 'left');
@@ -52,14 +75,22 @@ test('two independent portfolio devices connect and exchange cursor payloads', a
       .toBeGreaterThanOrEqual(2);
 
     await moveCursor(left, 0.3, 0.4);
-    await expect.poll(async () => Number(await rightPresence.getAttribute('data-remote-cursor-count')))
-      .toBeGreaterThanOrEqual(1);
+    const leftCursor = await expectExactCursor(left, right);
 
     await moveCursor(right, 0.7, 0.6);
-    await expect.poll(async () => Number(await leftPresence.getAttribute('data-remote-cursor-count')))
-      .toBeGreaterThanOrEqual(1);
+    await expectExactCursor(right, left);
+
+    await leftContext.close();
+    leftClosed = true;
+    await expect.poll(async () => {
+      const remote = await readCursorAttribute<CursorPosition[]>(right, 'data-remote-cursors');
+      return remote.some((candidate) => JSON.stringify(candidate) === JSON.stringify(leftCursor));
+    }).toBe(false);
   } finally {
-    await Promise.all([leftContext.close(), rightContext.close()]);
+    await Promise.all([
+      leftClosed ? Promise.resolve() : leftContext.close(),
+      rightContext.close(),
+    ]);
   }
 });
 
@@ -78,12 +109,10 @@ test('two pages sharing one browser device exchange cursors locally', async ({ b
       .toBeGreaterThanOrEqual(1);
 
     await moveCursor(left, 0.25, 0.35);
-    await expect.poll(async () => Number(await rightPresence.getAttribute('data-remote-cursor-count')))
-      .toBeGreaterThanOrEqual(1);
+    await expectExactCursor(left, right);
 
     await moveCursor(right, 0.75, 0.65);
-    await expect.poll(async () => Number(await leftPresence.getAttribute('data-remote-cursor-count')))
-      .toBeGreaterThanOrEqual(1);
+    await expectExactCursor(right, left);
   } finally {
     await context.close();
   }
