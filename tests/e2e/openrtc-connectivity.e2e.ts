@@ -1,27 +1,35 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
+interface CursorPosition {
+  x: number;
+  z: number;
+  color: string;
+}
+const browserErrors = new WeakMap<Page, string[]>();
+
 async function openPortfolioPeer(
   context: BrowserContext,
   label: string,
 ): Promise<Page> {
   const page = await context.newPage();
-  const browserErrors: string[] = [];
+  const errors: string[] = [];
+  browserErrors.set(page, errors);
   const isExpectedRoomControlFlow = (message: string) =>
     message === 'Failed to load resource: the server responded with a status of 404 ()'
     || message === 'Failed to load resource: the server responded with a status of 409 ()'
     || /\[OPENRTC\]\[FIRESTORE\].*status=(404 Not Found|409 Conflict)/s.test(message);
 
-  page.on('pageerror', (error) => browserErrors.push(error.message));
+  page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => {
     if (message.type() === 'error' && !isExpectedRoomControlFlow(message.text())) {
-      browserErrors.push(message.text());
+      errors.push(message.text());
     }
   });
 
   await page.goto(`/?peer=${label}`, { waitUntil: 'domcontentloaded' });
   const presence = page.getByTestId('openrtc-presence');
   await expect(presence).toHaveAttribute('data-openrtc-status', 'Joined');
-  expect(browserErrors, `${label} browser errors`).toEqual([]);
+  expect(errors, `${label} browser errors`).toEqual([]);
   return page;
 }
 
@@ -36,7 +44,23 @@ async function moveCursor(page: Page, xRatio: number, yRatio: number): Promise<v
   );
 }
 
-test('two independent portfolio devices connect and exchange cursor payloads', async ({ browser }) => {
+async function readCursorAttribute<T>(page: Page, name: string): Promise<T> {
+  const value = await page.getByTestId('openrtc-presence').getAttribute(name);
+  expect(value).not.toBeNull();
+  return JSON.parse(value!) as T;
+}
+
+async function expectExactCursor(source: Page, target: Page): Promise<CursorPosition> {
+  let cursor: CursorPosition | null = null;
+  await expect.poll(async () => {
+    cursor = await readCursorAttribute<CursorPosition>(source, 'data-local-cursor');
+    const remote = await readCursorAttribute<CursorPosition[]>(target, 'data-remote-cursors');
+    return remote.some((candidate) => JSON.stringify(candidate) === JSON.stringify(cursor));
+  }).toBe(true);
+  return cursor!;
+}
+
+test('two independent portfolio devices exchange exact space.state cursor payloads', async ({ browser }) => {
   const leftContext = await browser.newContext();
   const rightContext = await browser.newContext();
 
@@ -52,12 +76,13 @@ test('two independent portfolio devices connect and exchange cursor payloads', a
       .toBeGreaterThanOrEqual(2);
 
     await moveCursor(left, 0.3, 0.4);
-    await expect.poll(async () => Number(await rightPresence.getAttribute('data-remote-cursor-count')))
-      .toBeGreaterThanOrEqual(1);
+    await expectExactCursor(left, right);
 
     await moveCursor(right, 0.7, 0.6);
-    await expect.poll(async () => Number(await leftPresence.getAttribute('data-remote-cursor-count')))
-      .toBeGreaterThanOrEqual(1);
+    await expectExactCursor(right, left);
+
+    expect(browserErrors.get(left), 'left browser errors').toEqual([]);
+    expect(browserErrors.get(right), 'right browser errors').toEqual([]);
   } finally {
     await Promise.all([leftContext.close(), rightContext.close()]);
   }
@@ -78,12 +103,10 @@ test('two pages sharing one browser device exchange cursors locally', async ({ b
       .toBeGreaterThanOrEqual(1);
 
     await moveCursor(left, 0.25, 0.35);
-    await expect.poll(async () => Number(await rightPresence.getAttribute('data-remote-cursor-count')))
-      .toBeGreaterThanOrEqual(1);
+    await expectExactCursor(left, right);
 
     await moveCursor(right, 0.75, 0.65);
-    await expect.poll(async () => Number(await leftPresence.getAttribute('data-remote-cursor-count')))
-      .toBeGreaterThanOrEqual(1);
+    await expectExactCursor(right, left);
   } finally {
     await context.close();
   }
