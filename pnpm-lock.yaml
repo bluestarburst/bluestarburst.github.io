@@ -33,8 +33,8 @@ importers:
         specifier: ^0.574.0
         version: 0.574.0(react@19.2.8)
       openrtc:
-        specifier: 2.0.0-rc.29
-        version: 2.0.0-rc.29(@types/react@19.2.18)(react@19.2.8)(zod@4.4.3)
+        specifier: 2.0.0-rc.30
+        version: 2.0.0-rc.30(@types/react@19.2.18)(react@19.2.8)(zod@4.4.3)
       react:
         specifier: ^19.2.4
         version: 19.2.8
@@ -1687,8 +1687,8 @@ packages:
   onnxruntime-web@1.22.0-dev.20250409-89f8206ba4:
     resolution: {integrity: sha512-0uS76OPgH0hWCPrFKlL8kYVV7ckM7t/36HfbgoFw6Nd0CZVVbQC4PkrR8mBX8LtNUFZO25IQBqV2Hx2ho3FlbQ==}
 
-  openrtc@2.0.0-rc.29:
-    resolution: {integrity: sha512-X75mds00XmjUlWyy1R44qJIDvaeuH038Paf7F+3bGxUw4vJLxuWfjeJyZFOCwI07R8izpxi9s1fZiSucdqnZ5w==}
+  openrtc@2.0.0-rc.30:
+    resolution: {integrity: sha512-P0ObrfagtiJdG27/K6bkA7aEJjDyJaJNocSnuBbPDC2ErZVGjMOIob7On+yfSKq6Uqdpti+f97ihskSsIl3avg==}
 
   p-map@7.0.6:
     resolution: {integrity: sha512-I4Prw6ivkd6p8PiYR1tXASOAOBzIJwu0TB7fqaX0c/8c3QAehNYmX57EijyGGGBt3c/BIowGwV03RVBtXvHEVg==}
@@ -3641,7 +3641,7 @@ snapshots:
       platform: 1.3.6
       protobufjs: 7.6.5
 
-  openrtc@2.0.0-rc.29(@types/react@19.2.18)(react@19.2.8)(zod@4.4.3):
+  openrtc@2.0.0-rc.30(@types/react@19.2.18)(react@19.2.8)(zod@4.4.3):
     dependencies:
       '@moq/net': 0.1.9(@types/react@19.2.18)(react@19.2.8)(zod@4.4.3)
       '@noble/ciphers': 2.3.0
