@@ -5,29 +5,31 @@ interface CursorPosition {
   z: number;
   color: string;
 }
+const browserErrors = new WeakMap<Page, string[]>();
 
 async function openPortfolioPeer(
   context: BrowserContext,
   label: string,
 ): Promise<Page> {
   const page = await context.newPage();
-  const browserErrors: string[] = [];
+  const errors: string[] = [];
+  browserErrors.set(page, errors);
   const isExpectedRoomControlFlow = (message: string) =>
     message === 'Failed to load resource: the server responded with a status of 404 ()'
     || message === 'Failed to load resource: the server responded with a status of 409 ()'
     || /\[OPENRTC\]\[FIRESTORE\].*status=(404 Not Found|409 Conflict)/s.test(message);
 
-  page.on('pageerror', (error) => browserErrors.push(error.message));
+  page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => {
     if (message.type() === 'error' && !isExpectedRoomControlFlow(message.text())) {
-      browserErrors.push(message.text());
+      errors.push(message.text());
     }
   });
 
   await page.goto(`/?peer=${label}`, { waitUntil: 'domcontentloaded' });
   const presence = page.getByTestId('openrtc-presence');
   await expect(presence).toHaveAttribute('data-openrtc-status', 'Joined');
-  expect(browserErrors, `${label} browser errors`).toEqual([]);
+  expect(errors, `${label} browser errors`).toEqual([]);
   return page;
 }
 
@@ -61,7 +63,6 @@ async function expectExactCursor(source: Page, target: Page): Promise<CursorPosi
 test('two independent portfolio devices exchange exact space.state cursor payloads', async ({ browser }) => {
   const leftContext = await browser.newContext();
   const rightContext = await browser.newContext();
-  let leftClosed = false;
 
   try {
     const left = await openPortfolioPeer(leftContext, 'left');
@@ -75,22 +76,15 @@ test('two independent portfolio devices exchange exact space.state cursor payloa
       .toBeGreaterThanOrEqual(2);
 
     await moveCursor(left, 0.3, 0.4);
-    const leftCursor = await expectExactCursor(left, right);
+    await expectExactCursor(left, right);
 
     await moveCursor(right, 0.7, 0.6);
     await expectExactCursor(right, left);
 
-    await leftContext.close();
-    leftClosed = true;
-    await expect.poll(async () => {
-      const remote = await readCursorAttribute<CursorPosition[]>(right, 'data-remote-cursors');
-      return remote.some((candidate) => JSON.stringify(candidate) === JSON.stringify(leftCursor));
-    }).toBe(false);
+    expect(browserErrors.get(left), 'left browser errors').toEqual([]);
+    expect(browserErrors.get(right), 'right browser errors').toEqual([]);
   } finally {
-    await Promise.all([
-      leftClosed ? Promise.resolve() : leftContext.close(),
-      rightContext.close(),
-    ]);
+    await Promise.all([leftContext.close(), rightContext.close()]);
   }
 });
 

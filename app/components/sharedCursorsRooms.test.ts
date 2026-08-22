@@ -32,6 +32,7 @@ describe('cursor capability-space sharding', () => {
     );
     expect(component).toContain("space.state<CursorPosition>('cursor')");
     expect(component).toContain('cursorState.watch');
+    expect(component).toContain('space.onConnection');
     expect(component).not.toContain('space.diagnostics');
     expect(component).not.toContain('.disconnect()');
   });

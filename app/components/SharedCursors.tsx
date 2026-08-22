@@ -62,14 +62,14 @@ export function SharedCursors() {
     const broadcastRef = useRef<BroadcastChannel | null>(null);
     const instanceIdRef = useRef(getInstanceId());
     const localPeerIdsRef = useRef(new Set<string>());
-    const openRtcPeerCountRef = useRef(0);
+    const openRtcConnectionCountRef = useRef(0);
     const { theme } = useTheme();
 
     useEffect(() => {
         mountedRef.current = true;
 
         const updateActiveMemberCount = () => {
-            setActiveMemberCount(openRtcPeerCountRef.current + localPeerIdsRef.current.size + 1);
+            setActiveMemberCount(openRtcConnectionCountRef.current + localPeerIdsRef.current.size + 1);
         };
 
         const removeCursor = (peerKey: string) => {
@@ -110,6 +110,7 @@ export function SharedCursors() {
                 const cursorState = space.state<CursorPosition>('cursor');
                 cursorStateRef.current = cursorState;
                 setStatus('Joined');
+                const connectionIds = new Set<string>();
                 capabilityStopsRef.current = [
                     cursorState.watch(({ peerId, value }) => {
                         if (!mountedRef.current) return;
@@ -118,12 +119,15 @@ export function SharedCursors() {
                             setCursors((previous) => ({ ...previous, [peerId]: value }));
                         }
                     }),
-                    space.peers.watch((peers) => {
-                        if (!mountedRef.current) return;
-                        openRtcPeerCountRef.current = peers.filter(
-                            (peer) => peer.status === 'connected',
-                        ).length;
+                    space.onConnection((connection) => {
+                        connectionIds.add(connection.id);
+                        openRtcConnectionCountRef.current = connectionIds.size;
                         updateActiveMemberCount();
+                        connection.onClose(() => {
+                            connectionIds.delete(connection.id);
+                            openRtcConnectionCountRef.current = connectionIds.size;
+                            updateActiveMemberCount();
+                        });
                     }),
                 ];
 
@@ -183,7 +187,7 @@ export function SharedCursors() {
             broadcastRef.current?.close();
             broadcastRef.current = null;
             localPeerIdsRef.current.clear();
-            openRtcPeerCountRef.current = 0;
+            openRtcConnectionCountRef.current = 0;
             capabilityStopsRef.current.splice(0).forEach((stop) => stop());
             latestCursorPayloadRef.current = null;
             cursorStateRef.current = null;
