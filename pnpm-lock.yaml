@@ -1688,7 +1688,7 @@ packages:
     resolution: {integrity: sha512-0uS76OPgH0hWCPrFKlL8kYVV7ckM7t/36HfbgoFw6Nd0CZVVbQC4PkrR8mBX8LtNUFZO25IQBqV2Hx2ho3FlbQ==}
 
   openrtc@2.1.0:
-    resolution: {tarball: https://registry.npmjs.org/openrtc/-/openrtc-2.1.0.tgz}
+    resolution: {integrity: sha512-rbq9dcixBQho8+fMBXmeiQCtg9bNpUFIihYMRYV7rUc5T1OOSjgMdnWKaEKh9lnrKkrfFJhMot93j7rwo1oooQ==, tarball: https://registry.npmjs.org/openrtc/-/openrtc-2.1.0.tgz}
 
   p-map@7.0.6:
     resolution: {integrity: sha512-I4Prw6ivkd6p8PiYR1tXASOAOBzIJwu0TB7fqaX0c/8c3QAehNYmX57EijyGGGBt3c/BIowGwV03RVBtXvHEVg==}
