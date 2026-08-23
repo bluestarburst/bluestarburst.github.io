@@ -131,8 +131,7 @@ function spawnGateway() {
     '--var', `USAGE_INGEST_SECRET:${INGEST_SECRET}`,
     '--var', `USAGE_INGEST_URL:${FUNCTIONS_ORIGIN}/ingestCoordinationUsage`,
     '--var', 'OPENRTC_LOCAL_EMULATOR:true',
-    '--var', 'OPENRTC_V2_ENABLED:true',
-    '--var', `V2_GRANT_SIGNING_PUBLIC_JWKS:${JSON.stringify(publicJwks)}`,
+    '--var', `GRANT_SIGNING_PUBLIC_JWKS:${JSON.stringify(publicJwks)}`,
   ], { cwd: OPENRTC_GATEWAY, env: process.env, stdio: 'inherit' });
   children.push(child);
 }
@@ -195,9 +194,7 @@ function spawnFirebase() {
       CLOUDSDK_CONFIG: isolatedConfig,
       GOOGLE_APPLICATION_CREDENTIALS: blockedAdc,
       OPENRTC_USAGE_METERING_MODE: 'enforce',
-      OPENRTC_V2_ENABLED: 'true',
-      OPENRTC_V2_APP_ALLOWLIST: `app_${API_KEY.slice(-16)}`,
-      OPENRTC_V2_SIGNING_PRIVATE_JWK: JSON.stringify(privateJwk),
+      OPENRTC_SIGNING_PRIVATE_JWK: JSON.stringify(privateJwk),
       OPENRTC_COORDINATION_GATEWAY_URL: GATEWAY,
       OPENRTC_EMULATOR_COORDINATION_GATEWAY_SIGNING_SECRET: SIGNING_SECRET,
       OPENRTC_EMULATOR_COORDINATION_USAGE_INGEST_SECRET: INGEST_SECRET,
@@ -327,8 +324,8 @@ async function main() {
   const before = await durableStateSnapshot();
   const testingModule = pathToFileURL(join(OPENRTC_ROOT, 'packages', 'openrtc', 'src', 'testing.ts')).href;
   writeFileSync(testingAlias, [
-    `import { createTestingOpenRTC } from ${JSON.stringify(testingModule)};`,
-    `export const OpenRTC = (options) => createTestingOpenRTC(options, { controlPlane: ${JSON.stringify(CONTROL_PLANE)}, gateway: ${JSON.stringify(GATEWAY)} }, { irohTestRelayUrl: ${JSON.stringify(irohRelayUrl)} });`,
+    `import { OpenRTC as TestingOpenRTC } from ${JSON.stringify(testingModule)};`,
+    `export const OpenRTC = (options) => TestingOpenRTC(options, { controlPlane: ${JSON.stringify(CONTROL_PLANE)}, gateway: ${JSON.stringify(GATEWAY)} }, { irohTestRelayUrl: ${JSON.stringify(irohRelayUrl)} });`,
   ].join('\n'));
 
   run(join(PORTFOLIO_ROOT, 'node_modules', '.bin', 'playwright'), [

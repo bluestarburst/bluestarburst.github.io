@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { OpenRTC, type OpenRTCClient, type OpenRTCState, type OpenRTCSpaceHandle } from 'openrtc';
+import { OpenRTC, type Client, type State, type Space } from 'openrtc';
 import { AsciiBackground } from './AsciiBackground';
 import { StarField, SpaceDebris } from './ThreeElements';
 import { useTheme } from './ThemeContext';
@@ -52,9 +52,9 @@ export function SharedCursors() {
     const [status, setStatus] = useState('Initializing...');
     const [activeMemberCount, setActiveMemberCount] = useState(0);
     const [myMousePosition, setMyMousePosition] = useState({ x: 0, z: 0 });
-    const clientRef = useRef<OpenRTCClient | null>(null);
-    const spaceRef = useRef<OpenRTCSpaceHandle | null>(null);
-    const cursorStateRef = useRef<OpenRTCState<CursorPosition> | null>(null);
+    const clientRef = useRef<Client | null>(null);
+    const spaceRef = useRef<Space | null>(null);
+    const cursorStateRef = useRef<State<CursorPosition> | null>(null);
     const myColor = useRef(getRandomColor());
     const mountedRef = useRef(true);
     const capabilityStopsRef = useRef<Array<() => void>>([]);
