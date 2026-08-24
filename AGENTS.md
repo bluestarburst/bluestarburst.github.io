@@ -10,7 +10,7 @@ desktop/web app.
 - Set `VITE_OPENRTC_API_KEY` locally (see `.env.example`) and as the GitHub Actions secret used by `.github/workflows/deploy.yml`.
 - Cursor discovery uses bounded OpenRTC 2.0 capability spaces. It creates no
   Firebase Auth principal or durable room membership.
-- This is the OpenRTC **space avenue**, so it uses ephemeral/live collaboration
+- This is the OpenRTC **space avenue**, so it uses session/live collaboration
   semantics. Do not import Plutonium's user-device persistent roster behavior
   here, and do not use this site as evidence for user-scope device retention.
 - The public shared-cursor demo must run in OpenRTC strict/privacy mode: relay-only iroh, no local discovery, WebRTC relay-only/TURN-only behavior. Do not publish direct-address tickets from this site.

@@ -12,7 +12,7 @@ export interface SpaceClientLike<S> {
       id: string,
       options: {
         access: 'capability';
-        identity: 'ephemeral';
+        identity: 'session';
         payload: 'latest-state';
         maxPeers: number;
       },
@@ -61,7 +61,7 @@ export async function joinAvailableSpace<S>(
     try {
       const space = await client.spaces.join(spaceId, {
         access: 'capability',
-        identity: 'ephemeral',
+        identity: 'session',
         payload: 'latest-state',
         maxPeers,
       });
