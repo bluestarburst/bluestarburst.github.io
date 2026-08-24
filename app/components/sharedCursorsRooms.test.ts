@@ -50,7 +50,7 @@ describe('cursor capability-space sharding', () => {
     expect(isSpaceFullError(new Error('unauthorized'))).toBe(false);
   });
 
-  it('joins one ephemeral latest-state capability space', async () => {
+  it('joins one session latest-state capability space', async () => {
     const join = vi.fn(async (id: string) => ({ id }));
     const result = await joinAvailableSpace(mockClient(join), {
       prefix: 'cursor',
@@ -61,7 +61,7 @@ describe('cursor capability-space sharding', () => {
     expect(result).toEqual({ spaceId: 'cursor-2', space: { id: 'cursor-2' } });
     expect(join).toHaveBeenCalledWith('cursor-2', {
       access: 'capability',
-      identity: 'ephemeral',
+      identity: 'session',
       payload: 'latest-state',
       maxPeers: 16,
     });
