@@ -92,9 +92,6 @@ export function SharedCursors() {
                     transports: {
                         iroh: true,
                         webrtc: true,
-                        relay: true,
-                        privacy: 'relay-only',
-                        priority: ['webrtc', 'iroh'],
                     },
                 });
                 const { space } = await joinAvailableSpace(client);
