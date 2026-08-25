@@ -21,7 +21,7 @@ describe('cursor capability-space sharding', () => {
       'utf8',
     );
     expect(component).toContain('iroh: true');
-    expect(component).toContain('webrtc: true');
+    expect(component).toContain("webrtc: { implementation: 'iroh-carrier' }");
     expect(component).not.toContain("privacy: 'relay-only'");
     expect(component).not.toContain('relay: true');
   });
