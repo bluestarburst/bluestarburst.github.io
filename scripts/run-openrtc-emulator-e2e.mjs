@@ -3,7 +3,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import net from 'node:net';
@@ -16,7 +16,7 @@ import { stopChildrenAndWait } from '../../plutonium-src/scripts/lib/tracked-chi
 
 const PORTFOLIO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const WORKSPACE_ROOT = dirname(PORTFOLIO_ROOT);
-const OPENRTC_ROOT = join(WORKSPACE_ROOT, 'openrtc');
+const OPENRTC_ROOT = resolve(process.env.OPENRTC_SOURCE_ROOT?.trim() || join(WORKSPACE_ROOT, 'openrtc'));
 const OPENRTC_FIREBASE = join(OPENRTC_ROOT, 'infra', 'firebase');
 const OPENRTC_GATEWAY = join(OPENRTC_ROOT, 'packages', 'openrtc-coordination-gateway');
 const WRANGLER = join(OPENRTC_GATEWAY, 'node_modules', 'wrangler', 'bin', 'wrangler.js');

@@ -16,7 +16,9 @@ async function openPortfolioPeer(
   browserErrors.set(page, errors);
   const isExpectedRoomControlFlow = (message: string) =>
     message === 'Failed to load resource: the server responded with a status of 404 ()'
+    || message === 'Failed to load resource: the server responded with a status of 404 (Not Found)'
     || message === 'Failed to load resource: the server responded with a status of 409 ()'
+    || message === 'Failed to load resource: the server responded with a status of 409 (Conflict)'
     || /\[OPENRTC\]\[FIRESTORE\].*status=(404 Not Found|409 Conflict)/s.test(message);
 
   page.on('pageerror', (error) => errors.push(error.message));
