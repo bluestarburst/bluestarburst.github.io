@@ -15,14 +15,15 @@ function mockClient(join: SpaceClientLike<Space>['spaces']['join']): SpaceClient
 }
 
 describe('cursor capability-space sharding', () => {
-  it('keeps public cursor peers in the manifest-gated relay privacy path', () => {
+  it('uses direct P2P first without forcing the managed relay path', () => {
     const component = readFileSync(
       new URL('./SharedCursors.tsx', import.meta.url),
       'utf8',
     );
-    expect(component).toContain('relay: true');
-    expect(component).toContain("privacy: 'relay-only'");
-    expect(component).toContain("priority: ['webrtc', 'iroh']");
+    expect(component).toContain('iroh: true');
+    expect(component).toContain('webrtc: true');
+    expect(component).not.toContain("privacy: 'relay-only'");
+    expect(component).not.toContain('relay: true');
   });
 
   it('uses latest-state without taking over peer lifecycle', () => {
