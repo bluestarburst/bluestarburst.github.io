@@ -4,6 +4,7 @@ import { AsciiBackground } from './AsciiBackground';
 import { StarField, SpaceDebris } from './ThreeElements';
 import { useTheme } from './ThemeContext';
 import { cursorErrorStatus, joinAvailableSpace } from './sharedCursorsRooms';
+import { createCursorPublisher } from './cursorPublisher';
 
 const API_KEY = (import.meta.env.VITE_OPENRTC_API_KEY ?? '').trim();
 
@@ -55,6 +56,7 @@ export function SharedCursors() {
     const clientRef = useRef<Client | null>(null);
     const spaceRef = useRef<Space | null>(null);
     const cursorStateRef = useRef<State<CursorPosition> | null>(null);
+    const cursorPublisherRef = useRef<ReturnType<typeof createCursorPublisher<CursorPosition>> | null>(null);
     const myColor = useRef(getRandomColor());
     const mountedRef = useRef(true);
     const capabilityStopsRef = useRef<Array<() => void>>([]);
@@ -67,6 +69,15 @@ export function SharedCursors() {
 
     useEffect(() => {
         mountedRef.current = true;
+        cursorPublisherRef.current = createCursorPublisher<CursorPosition>((payload) => {
+            if (!mountedRef.current || !cursorStateRef.current) return;
+            cursorStateRef.current.set(payload);
+            broadcastRef.current?.postMessage({
+                sender: instanceIdRef.current,
+                type: 'cursor',
+                payload,
+            } satisfies CursorMessage);
+        });
 
         const updateActiveMemberCount = () => {
             setActiveMemberCount(openRtcConnectionCountRef.current + localPeerIdsRef.current.size + 1);
@@ -157,11 +168,7 @@ export function SharedCursors() {
                             } satisfies CursorMessage);
                             const latestPayload = latestCursorPayloadRef.current;
                             if (latestPayload) {
-                                channel.postMessage({
-                                    sender: instanceIdRef.current,
-                                    type: 'cursor',
-                                    payload: latestPayload,
-                                } satisfies CursorMessage);
+                                cursorPublisherRef.current?.update(latestPayload);
                             }
                         }
                     };
@@ -169,6 +176,9 @@ export function SharedCursors() {
                         sender: instanceIdRef.current,
                         type: 'hello',
                     } satisfies CursorMessage);
+                }
+                if (latestCursorPayloadRef.current) {
+                    cursorPublisherRef.current?.update(latestCursorPayloadRef.current);
                 }
             } catch (error) {
                 // Do not log raw service errors: they may contain request credentials.
@@ -181,6 +191,8 @@ export function SharedCursors() {
 
         return () => {
             mountedRef.current = false;
+            cursorPublisherRef.current?.close();
+            cursorPublisherRef.current = null;
             broadcastRef.current?.postMessage({
                 sender: instanceIdRef.current,
                 type: 'cursor_leave',
@@ -208,12 +220,7 @@ export function SharedCursors() {
 
         setMyMousePosition(payload);
         latestCursorPayloadRef.current = payload;
-        cursorStateRef.current?.set(payload);
-        broadcastRef.current?.postMessage({
-            sender: instanceIdRef.current,
-            type: 'cursor',
-            payload,
-        } satisfies CursorMessage);
+        cursorPublisherRef.current?.update(payload);
     };
 
     return (

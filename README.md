@@ -63,6 +63,20 @@ workspace `portfolio-production` lease. They do **not** prove the currently
 deployed GitHub Pages bundle. The legacy emulator runner still requires
 harness identity/cleanup hardening before it can supply release evidence.
 
+### Cursor publication pacing
+
+Cursor movement now uses an application publication cap of 20 Hz: each 50 ms
+window sends its latest value to SDK state and local broadcast, while the local
+cursor remains responsive every frame. Partial windows flush once; idle periods
+schedule nothing, and unmount cancels pending publication. SDK 2.5.4 coalesces
+backpressured latest-state sends but does not impose this frequency ceiling.
+Fake-clock tests exercise 1,000 movement updates over one second and observe
+exactly 20 publications, including the final value, plus idle/unmount checks.
+These are producer-counter tests, not measured relay byte counts or proof of the
+1,000-visit workload. The earlier cross-browser evidence above predates this
+pacing change and must be rerun before release. Capacity remains 12 eight-member
+spaces; this change does not expand admission or alter relay-only privacy.
+
 ### Pending SDK error-observation contract
 
 The settled error labels above cover rejected `spaces.join()` calls only.
