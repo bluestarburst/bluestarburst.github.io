@@ -51,11 +51,17 @@ rate-limit denials never do so. Failed admission displays a settled status
 instead of a misleading green active-cursor count.
 
 Dependency upgrade checkpoint (2026-09-10): published `openrtc@2.5.4`, with
-unit/type/build validation. Cross-browser test implementation is not itself
-evidence of a passing hosted run; record that result separately using the
-reviewed Portfolio identity and workspace hosted-test lease. The legacy
-emulator runner still requires harness identity/cleanup hardening before it
-can supply release evidence.
+19 unit tests, typecheck, and production build passing. At source
+`835bf703dacf9776a9cbbfcd5815ccf5a079b964`, the full connectivity suite passed
+3/3 in 53.1 seconds: independent Chromium contexts, actual Chromium + Firefox
+with `BroadcastChannel` unavailable and zero local peers, and same-browser
+local broadcast. The cross-browser test required exact, newly moved cursor
+payloads in both directions; an isolated run also passed in 21.4 seconds.
+These runs used a managed local production build, the published SDK, the
+Portfolio identity, and the managed production OpenRTC service under the
+workspace `portfolio-production` lease. They do **not** prove the currently
+deployed GitHub Pages bundle. The legacy emulator runner still requires
+harness identity/cleanup hardening before it can supply release evidence.
 
 The OpenRTC package is consumed from npm by default so this repo can be cloned
 and developed without the full workspace. Workspace-local OpenRTC SDK changes
