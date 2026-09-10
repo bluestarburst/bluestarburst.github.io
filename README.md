@@ -63,6 +63,25 @@ workspace `portfolio-production` lease. They do **not** prove the currently
 deployed GitHub Pages bundle. The legacy emulator runner still requires
 harness identity/cleanup hardening before it can supply release evidence.
 
+### Pending SDK error-observation contract
+
+The settled error labels above cover rejected `spaces.join()` calls only.
+Published OpenRTC 2.5.4 does not expose an avenue coordination-error/status
+subscription. Its `diagnostics.onStateChange` observes peer route states;
+`diagnostics.status()` reports runtime/WASM identity, not gateway admission.
+Its public `RTCError` also lacks `retryAfterMs` and `resetAt`. Therefore the
+portfolio cannot truthfully display a post-join gateway denial or retry time
+from that release. A successful `join()` alone must not be treated as proof
+that later presence publication succeeded.
+
+The SDK must project typed service errors and recovery timing from its existing
+coordination lifecycle owner through a public avenue observer, then publish
+that API before this consumer adopts it. Consumer follow-up tests must inject
+post-join terminal and time-based denials through that public API and verify
+the rendered status/timing without adding polling, reconnect timers, or extra
+admission requests. Peer absence, console interception, and a synthetic UI
+timeout are not substitutes for authoritative service-error observations.
+
 The OpenRTC package is consumed from npm by default so this repo can be cloned
 and developed without the full workspace. Workspace-local OpenRTC SDK changes
 should be validated in `openrtc/` first, then consumed here after publish or an
