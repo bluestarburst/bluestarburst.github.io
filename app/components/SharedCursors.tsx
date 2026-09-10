@@ -3,7 +3,7 @@ import { OpenRTC, type Client, type State, type Space } from 'openrtc';
 import { AsciiBackground } from './AsciiBackground';
 import { StarField, SpaceDebris } from './ThreeElements';
 import { useTheme } from './ThemeContext';
-import { joinAvailableSpace } from './sharedCursorsRooms';
+import { cursorErrorStatus, joinAvailableSpace } from './sharedCursorsRooms';
 
 const API_KEY = (import.meta.env.VITE_OPENRTC_API_KEY ?? '').trim();
 
@@ -81,17 +81,20 @@ export function SharedCursors() {
         };
 
         const init = async () => {
+            let client: Client | null = null;
             try {
                 if (!API_KEY) {
                     setStatus('Missing API key');
                     return;
                 }
 
-                const client = OpenRTC({
+                client = OpenRTC({
                     apiKey: API_KEY,
                     transports: {
                         iroh: true,
-                        webrtc: { implementation: 'iroh-carrier' },
+                        privacy: 'relay-only',
+                        relay: true,
+                        webrtc: true,
                     },
                 });
                 const { space } = await joinAvailableSpace(client);
@@ -168,8 +171,9 @@ export function SharedCursors() {
                     } satisfies CursorMessage);
                 }
             } catch (error) {
-                console.error('Failed to init SharedCursors:', error);
-                if (mountedRef.current) setStatus('Error');
+                // Do not log raw service errors: they may contain request credentials.
+                if (mountedRef.current) setStatus(cursorErrorStatus(error));
+                await client?.close().catch(() => {});
             }
         };
 
@@ -220,14 +224,15 @@ export function SharedCursors() {
                     className="px-3 py-1.5 bg-black/80 backdrop-blur rounded-full text-[10px] font-bold text-white border border-white/10 shadow-lg flex items-center gap-2"
                     data-openrtc-status={status}
                     data-active-member-count={activeMemberCount}
+                    data-openrtc-connection-count={openRtcConnectionCountRef.current}
                     data-local-tab-peer-count={localPeerIdsRef.current.size}
                     data-remote-cursor-count={Object.keys(cursors).length}
                     data-local-cursor={JSON.stringify({ ...myMousePosition, color: myColor.current })}
                     data-remote-cursors={JSON.stringify(Object.values(cursors))}
                     data-testid="openrtc-presence"
                 >
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                    <span>{activeMemberCount} ACTIVE CURSOR{activeMemberCount !== 1 ? 'S' : ''}</span>
+                    <div className={`w-1.5 h-1.5 rounded-full ${status === 'Joined' ? 'bg-green-500' : 'bg-amber-500'}`} />
+                    <span>{status === 'Joined' ? `${activeMemberCount} ACTIVE CURSOR${activeMemberCount !== 1 ? 'S' : ''}` : status}</span>
                 </div>
             </div>
 

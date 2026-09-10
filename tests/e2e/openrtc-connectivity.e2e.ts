@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, firefox, test, type BrowserContext, type Page } from '@playwright/test';
 
 interface CursorPosition {
   x: number;
@@ -36,6 +36,7 @@ async function openPortfolioPeer(
 }
 
 async function moveCursor(page: Page, xRatio: number, yRatio: number): Promise<void> {
+  const previous = await page.getByTestId('openrtc-presence').getAttribute('data-local-cursor');
   const canvas = page.locator('canvas').first();
   await expect(canvas).toBeVisible();
   const bounds = await canvas.boundingBox();
@@ -44,6 +45,7 @@ async function moveCursor(page: Page, xRatio: number, yRatio: number): Promise<v
     bounds!.x + bounds!.width * xRatio,
     bounds!.y + bounds!.height * yRatio,
   );
+  await expect(page.getByTestId('openrtc-presence')).not.toHaveAttribute('data-local-cursor', previous!);
 }
 
 async function readCursorAttribute<T>(page: Page, name: string): Promise<T> {
@@ -87,6 +89,42 @@ test('two independent portfolio devices exchange exact space.state cursor payloa
     expect(browserErrors.get(right), 'right browser errors').toEqual([]);
   } finally {
     await Promise.all([leftContext.close(), rightContext.close()]);
+  }
+});
+
+test('Chromium and Firefox exchange exact cursors without BroadcastChannel', async ({ browser, baseURL, ignoreHTTPSErrors }) => {
+  const otherBrowser = await firefox.launch();
+  const contexts = await Promise.all([
+    browser.newContext({ baseURL, ignoreHTTPSErrors }),
+    otherBrowser.newContext({ baseURL, ignoreHTTPSErrors }),
+  ]);
+  try {
+    for (const context of contexts) {
+      await context.addInitScript(() => {
+        Object.defineProperty(globalThis, 'BroadcastChannel', { value: undefined, configurable: false });
+      });
+    }
+    const [left, right] = await Promise.all([
+      openPortfolioPeer(contexts[0], 'chromium-network'),
+      openPortfolioPeer(contexts[1], 'firefox-network'),
+    ]);
+    for (const page of [left, right]) {
+      expect(await page.evaluate(() => typeof BroadcastChannel)).toBe('undefined');
+      await expect(page.getByTestId('openrtc-presence')).toHaveAttribute('data-local-tab-peer-count', '0');
+      await expect.poll(async () => Number(await page.getByTestId('openrtc-presence')
+        .getAttribute('data-openrtc-connection-count'))).toBeGreaterThanOrEqual(1);
+    }
+    await moveCursor(left, 0.28, 0.38);
+    await expectExactCursor(left, right);
+    await moveCursor(right, 0.72, 0.62);
+    await expectExactCursor(right, left);
+    for (const page of [left, right]) {
+      await expect(page.getByTestId('openrtc-presence')).toHaveAttribute('data-local-tab-peer-count', '0');
+      expect(browserErrors.get(page), 'cross-browser errors').toEqual([]);
+    }
+  } finally {
+    await Promise.all(contexts.map((context) => context.close()));
+    await otherBrowser.close();
   }
 });
 

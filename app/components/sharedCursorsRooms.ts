@@ -6,6 +6,22 @@
 export const SPACE_PREFIX = 'portfolio-cursors';
 export const SPACE_SHARDS = 12;
 
+export function cursorErrorStatus(error: unknown): string {
+  const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+  switch (code) {
+    case 'credit-exhausted': return 'Account credits exhausted';
+    case 'app-budget-exhausted': return 'Cursor app budget exhausted';
+    case 'app-rate-limited': return 'Cursor app temporarily rate limited';
+    case 'principal-rate-limited': return 'Your cursor session is temporarily rate limited';
+    case 'edge-rate-limited': return 'Network temporarily rate limited';
+    case 'provider-safety-paused': return 'Cursor service temporarily paused';
+    case 'usage-price-stale': return 'Please reload to update cursor pricing';
+    case 'relay-budget-exhausted': return 'Cursor relay budget exhausted';
+    case 'room-capacity-exceeded': return 'All cursor spaces are full';
+    default: return 'Cursor connection failed';
+  }
+}
+
 export interface SpaceClientLike<S> {
   spaces: {
     join(
@@ -26,8 +42,11 @@ export function getSpaceId(shard: number, prefix: string = SPACE_PREFIX): string
 }
 
 export function isSpaceFullError(error: unknown): boolean {
+  if (error && typeof error === 'object' && 'code' in error) {
+    return error.code === 'room-capacity-exceeded';
+  }
   const message = error instanceof Error ? error.message : String(error);
-  return /space is full|resource-exhausted|budget-exhausted|429|capacity/i.test(message);
+  return /^(?:\[OpenRTC\] )?(?:space is full|room is full|room-capacity-exceeded)[.!]?$/i.test(message);
 }
 
 /**
