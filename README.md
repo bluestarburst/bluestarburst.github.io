@@ -60,8 +60,10 @@ payloads in both directions; an isolated run also passed in 21.4 seconds.
 These runs used a managed local production build, the published SDK, the
 Portfolio identity, and the managed production OpenRTC service under the
 workspace `portfolio-production` lease. They do **not** prove the currently
-deployed GitHub Pages bundle. The legacy emulator runner still requires
-harness identity/cleanup hardening before it can supply release evidence.
+deployed GitHub Pages bundle. The local emulator runner now has isolated
+identity/cleanup and source-artifact gates; see
+[local connectivity harness](docs/local-connectivity-harness.md). Wrapper tests
+do not replace the pending source-current cross-browser run.
 
 ### Cursor publication pacing
 

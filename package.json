@@ -13,6 +13,7 @@
     "start": "react-router-serve ./build/server/index.js",
     "test:connectivity": "playwright test",
     "test:connectivity:emulator": "node scripts/run-openrtc-emulator-e2e.mjs",
+    "test:connectivity:runner": "node --test scripts/emulator-processes.node.mjs",
     "typecheck": "react-router typegen && tsc",
     "test": "vitest run"
   },

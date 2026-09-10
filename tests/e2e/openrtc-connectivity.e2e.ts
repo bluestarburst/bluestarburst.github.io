@@ -29,6 +29,11 @@ async function openPortfolioPeer(
   });
 
   await page.goto(`/?peer=${label}`, { waitUntil: 'domcontentloaded' });
+  if (process.env.PORTFOLIO_E2E_RUN_ID) {
+    await expect.poll(() => page.evaluate(() => (window as unknown as {
+      __portfolioHarnessIdentity?: { runId: string };
+    }).__portfolioHarnessIdentity?.runId)).toBe(process.env.PORTFOLIO_E2E_RUN_ID);
+  }
   const presence = page.getByTestId('openrtc-presence');
   await expect(presence).toHaveAttribute('data-openrtc-status', 'Joined');
   expect(errors, `${label} browser errors`).toEqual([]);
@@ -64,9 +69,9 @@ async function expectExactCursor(source: Page, target: Page): Promise<CursorPosi
   return cursor!;
 }
 
-test('two independent portfolio devices exchange exact space.state cursor payloads', async ({ browser }) => {
-  const leftContext = await browser.newContext();
-  const rightContext = await browser.newContext();
+test('two independent portfolio devices exchange exact space.state cursor payloads', async ({ browser, baseURL, ignoreHTTPSErrors }) => {
+  const leftContext = await browser.newContext({ baseURL, ignoreHTTPSErrors });
+  const rightContext = await browser.newContext({ baseURL, ignoreHTTPSErrors });
 
   try {
     const left = await openPortfolioPeer(leftContext, 'left');
@@ -128,8 +133,8 @@ test('Chromium and Firefox exchange exact cursors without BroadcastChannel', asy
   }
 });
 
-test('two pages sharing one browser device exchange cursors locally', async ({ browser }) => {
-  const context = await browser.newContext();
+test('two pages sharing one browser device exchange cursors locally', async ({ browser, baseURL, ignoreHTTPSErrors }) => {
+  const context = await browser.newContext({ baseURL, ignoreHTTPSErrors });
 
   try {
     const left = await openPortfolioPeer(context, 'same-device-left');
