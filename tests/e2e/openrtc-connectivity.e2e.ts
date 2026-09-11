@@ -133,7 +133,7 @@ test('Chromium and Firefox exchange exact cursors without BroadcastChannel', asy
   }
 });
 
-test('two pages sharing one browser device exchange cursors locally', async ({ browser, baseURL, ignoreHTTPSErrors }) => {
+test('same-browser tabs exchange exact cursors through OpenRTC', async ({ browser, baseURL, ignoreHTTPSErrors }) => {
   const context = await browser.newContext({ baseURL, ignoreHTTPSErrors });
 
   try {
@@ -142,10 +142,11 @@ test('two pages sharing one browser device exchange cursors locally', async ({ b
     const leftPresence = left.getByTestId('openrtc-presence');
     const rightPresence = right.getByTestId('openrtc-presence');
 
-    await expect.poll(async () => Number(await leftPresence.getAttribute('data-local-tab-peer-count')))
-      .toBeGreaterThanOrEqual(1);
-    await expect.poll(async () => Number(await rightPresence.getAttribute('data-local-tab-peer-count')))
-      .toBeGreaterThanOrEqual(1);
+    for (const presence of [leftPresence, rightPresence]) {
+      await expect(presence).toHaveAttribute('data-local-tab-peer-count', '0');
+      await expect.poll(async () => Number(await presence.getAttribute('data-openrtc-connection-count')))
+        .toBeGreaterThanOrEqual(1);
+    }
 
     await moveCursor(left, 0.25, 0.35);
     await expectExactCursor(left, right);
