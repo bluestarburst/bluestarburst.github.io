@@ -35,6 +35,30 @@ GitHub Pages deploys read `VITE_OPENRTC_API_KEY` from this repo's Actions
 secrets. That secret must be the portfolio app public key from the workspace
 `[Portfolio App]` secret group.
 
+### Anonymous cursor verification
+
+Set the public `VITE_TURNSTILE_SITE_KEY` in the selected local Vite overlay and
+the GitHub Actions repository variable of the same name. The secret must never
+be in this repository or a Vite variable: OpenRTC's existing backend reads its
+Secret Manager reference from the Portfolio app's Turnstile configuration.
+Both sides use action `portfolio_join`; production verification must allow only
+the deployed Portfolio hostname, never localhost. Keep local test identity and
+hostname configuration separate from production.
+
+The managed widget appears only when interaction is needed, obtains a fresh
+single-use token for each anonymous capability request, and is removed on
+settlement or unmount. Script loading is bounded to ten seconds; a challenge has
+up to one minute. Verification failure leaves the portfolio viewable and settles
+the cursor status. There is no BroadcastChannel fallback or app-level reconnect
+loop. Unit tests use a simulated widget API; they do not prove real verification
+or cross-browser transport. Before enabling backend enforcement, configure the
+real key/secret pair and prove a fresh request succeeds and token replay fails.
+Do not use Cloudflare testing keys against the production app.
+
+Hosted widget provisioning and backend enforcement are not yet activated by this
+source change. An absent site key omits the SDK verification callback during the
+additive rollout; a backend requiring Turnstile still rejects missing evidence.
+
 `pnpm test:connectivity` builds the production client and verifies isolated
 Chromium contexts, a separate Chromium + Firefox pair, and same-browser tabs.
 The cross-browser case disables `BroadcastChannel`, requires zero local-tab
@@ -49,6 +73,25 @@ does not implement transport selection or reconnect loops. Ordinary room
 capacity may advance to the next bounded space shard; credit, provider, and
 rate-limit denials never do so. Failed admission displays a settled status
 instead of a misleading green active-cursor count.
+
+### Bounded overflow placement
+
+Visitors first request the same primary space, preserving discovery for ordinary
+two-browser visits. Only an explicit capacity rejection enables overflow into a
+512-name pool of eight-member spaces (4,096 potential slots). Overflow starts at
+a random candidate, visits no candidate twice, and stops after 16 total join
+attempts. Unused names do not activate spaces. Probe exhaustion means no space
+was found within that bound, not that every space in the pool is full.
+
+Current local placement tests use the actual helper/defaults and simulated
+authoritative capacity: all 2,000 overlapping participants are admitted for five
+reproducible random seeds, with at most 6,000 total join attempts per sample.
+They also verify primary-space co-location, immediate financial/trust denial,
+probe bounds and departure cleanup. These are not signed-admission, shared-IP,
+cross-browser transport or cost acceptance. Failed probes must be included in
+the integrated provider-work measurements. In particular, the post-join SDK
+observation gap below still needs resolution; a capacity mock is not proof that
+the published runtime reports the rejection at this boundary.
 
 Dependency upgrade checkpoint (2026-09-10): published `openrtc@2.5.4`, with
 19 unit tests, typecheck, and production build passing. At source
@@ -76,8 +119,9 @@ Fake-clock tests exercise 1,000 movement updates over one second and observe
 exactly 20 publications, including the final value, plus idle/unmount checks.
 These are producer-counter tests, not measured relay byte counts or proof of the
 1,000-visit workload. The earlier cross-browser evidence above predates this
-pacing change and must be rerun before release. Capacity remains 12 eight-member
-spaces; this change does not expand admission or alter relay-only privacy.
+pacing change and must be rerun before release. The later bounded overflow
+placement change above expands the candidate pool, not per-space admission or
+relay-only privacy.
 
 ### Pending SDK error-observation contract
 

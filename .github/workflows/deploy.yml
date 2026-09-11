@@ -46,11 +46,13 @@ jobs:
       - name: Browser connectivity test
         env:
           VITE_OPENRTC_API_KEY: ${{ secrets.VITE_OPENRTC_API_KEY }}
+          VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY }}
         run: pnpm run test:connectivity
 
       - name: Build
         env:
           VITE_OPENRTC_API_KEY: ${{ secrets.VITE_OPENRTC_API_KEY }}
+          VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY }}
         run: pnpm run build
 
       - name: Upload artifact

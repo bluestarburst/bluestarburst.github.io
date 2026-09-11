@@ -19,7 +19,7 @@ describe('cursor capability-space sharding', () => {
   it('renders safe actionable billing labels instead of hiding errors behind a cursor count', () => {
     expect(cursorErrorStatus({ code: 'credit-exhausted' })).toBe('Account credits exhausted');
     expect(cursorErrorStatus({ code: 'app-rate-limited' })).toBe('Cursor app temporarily rate limited');
-    expect(cursorErrorStatus({ code: 'room-capacity-exceeded' })).toBe('All cursor spaces are full');
+    expect(cursorErrorStatus({ code: 'room-capacity-exceeded' })).toBe('No available cursor space found');
     expect(cursorErrorStatus(new Error('private credential material'))).toBe('Cursor connection failed');
   });
   it('keeps public cursor addresses private with the SDK relay-only policy', () => {
@@ -70,12 +70,12 @@ describe('cursor capability-space sharding', () => {
     expect(join).toHaveBeenCalledTimes(1);
   });
 
-  it('bounds explicit room-capacity-exceeded at the twelve configured shards', async () => {
+  it('bounds capacity probing without visiting every configured shard', async () => {
     const error = Object.assign(new Error('capacity denied'), { code: 'room-capacity-exceeded' });
     const join = vi.fn(async (_id: string) => { throw error; });
     await expect(joinAvailableSpace(mockClient(join))).rejects.toBe(error);
-    expect(join).toHaveBeenCalledTimes(12);
-    expect(new Set(join.mock.calls.map(([id]) => id)).size).toBe(12);
+    expect(join).toHaveBeenCalledTimes(16);
+    expect(new Set(join.mock.calls.map(([id]) => id)).size).toBe(16);
   });
 
   it('joins one session latest-state capability space', async () => {
@@ -102,6 +102,14 @@ describe('cursor capability-space sharding', () => {
     expect(join).toHaveBeenCalledTimes(1);
     expect(join).toHaveBeenCalledWith('portfolio-cursors-0', expect.objectContaining({ maxPeers: 8 }));
   });
+
+  it.each([{ shards: 513 }, { shards: 0 }, { startShard: -1 }, { startShard: 512 }, { startShard: 1.5 }])(
+    'rejects invalid placement bounds before contacting OpenRTC: %j', async (options) => {
+      const join = vi.fn(async (id: string) => ({ id }));
+      await expect(joinAvailableSpace(mockClient(join), options)).rejects.toThrow();
+      expect(join).not.toHaveBeenCalled();
+    },
+  );
 
   it('walks to the next shard after a bounded capacity denial', async () => {
     const join = vi.fn()
