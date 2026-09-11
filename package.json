@@ -12,6 +12,7 @@
     "mode": "node scripts/mode.mjs",
     "start": "react-router-serve ./build/server/index.js",
     "test:connectivity": "playwright test",
+    "test:turnstile:integration": "node --test tests/integration/turnstile.node.mjs",
     "test:connectivity:emulator": "node scripts/run-openrtc-emulator-e2e.mjs",
     "test:connectivity:runner": "node --test scripts/emulator-processes.node.mjs",
     "typecheck": "react-router typegen && tsc",

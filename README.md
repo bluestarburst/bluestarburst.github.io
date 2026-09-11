@@ -29,6 +29,7 @@ pnpm typecheck
 pnpm test
 pnpm exec playwright install chromium firefox
 pnpm test:connectivity
+pnpm test:turnstile:integration
 ```
 
 GitHub Pages deploys read `VITE_OPENRTC_API_KEY` from this repo's Actions
@@ -66,6 +67,18 @@ peers and a live OpenRTC connection on both sides, and verifies newly moved,
 exact cursor payloads in both directions. It uses the
 managed production OpenRTC service and therefore requires the portfolio
 `VITE_OPENRTC_API_KEY`; it is not a mocked transport test.
+
+`pnpm test:turnstile:integration` separately runs the actual widget helper in
+Chromium and Firefox against Cloudflare's official success/failure test sitekeys.
+It serves only the helper on an ephemeral loopback port, uses no OpenRTC app
+identity or backend, and checks token completion, rejection and widget cleanup.
+It does not change production build variables or upload browser traces.
+This proves frontend integration, not server verification, real-token replay
+protection, or cursor delivery. The live Siteverify dummy-key response may omit
+the action required by OpenRTC; never weaken action/hostname checks to accept it.
+Production challenges can reject browser automation, so the real-widget network
+gate remains separate and currently unverified. See [Cloudflare testing
+guidance](https://developers.cloudflare.com/turnstile/troubleshooting/testing/).
 
 The public demo requests OpenRTC's `privacy: 'relay-only'` policy: no direct
 addresses or local discovery, and relay-only WebRTC when available. The app

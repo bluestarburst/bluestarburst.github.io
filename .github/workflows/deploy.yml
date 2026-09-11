@@ -43,6 +43,9 @@ jobs:
       - name: Unit tests
         run: pnpm run test
 
+      - name: Isolated Turnstile browser integration
+        run: pnpm run test:turnstile:integration
+
       - name: Browser connectivity test
         env:
           VITE_OPENRTC_API_KEY: ${{ secrets.VITE_OPENRTC_API_KEY }}
