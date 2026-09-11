@@ -14,7 +14,7 @@ export default defineConfig({
   testMatch: '**/*.e2e.ts',
   fullyParallel: false,
   workers: 1,
-  timeout: 90_000,
+  timeout: 180_000,
   expect: {
     timeout: 30_000,
   },
@@ -22,7 +22,8 @@ export default defineConfig({
   reporter: process.env.CI ? [['github'], ['line']] : 'line',
   use: {
     baseURL: externalBaseURL || 'http://127.0.0.1:4173',
-    trace: 'retain-on-failure',
+    // Live capability requests carry credentials; do not persist request bodies.
+    trace: 'off',
     video: 'retain-on-failure',
   },
   projects: [

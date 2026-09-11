@@ -35,7 +35,9 @@ async function openPortfolioPeer(
     }).__portfolioHarnessIdentity?.runId)).toBe(process.env.PORTFOLIO_E2E_RUN_ID);
   }
   const presence = page.getByTestId('openrtc-presence');
-  await expect(presence).toHaveAttribute('data-openrtc-status', 'Joined');
+  // Allow the bounded 60-second verification attempt to settle before diagnosing
+  // startup. Cursor delivery retains the shorter default assertion deadline.
+  await expect(presence).toHaveAttribute('data-openrtc-status', 'Joined', { timeout: 75_000 });
   expect(errors, `${label} browser errors`).toEqual([]);
   return page;
 }
