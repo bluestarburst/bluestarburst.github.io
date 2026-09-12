@@ -27,6 +27,15 @@ const GATEWAY = `http://127.0.0.1:${GATEWAY_PORT}`;
 const API_KEY = `pk_test_${randomBytes(20).toString('hex')}`;
 const SIGNING_SECRET = randomBytes(32).toString('hex');
 const INGEST_SECRET = randomBytes(32).toString('hex');
+const fixturePlan = process.env.PORTFOLIO_E2E_PLAN ?? 'free';
+const webkitEndpoint = process.env.PORTFOLIO_WEBKIT_WS_ENDPOINT;
+if (webkitEndpoint) {
+  const endpoint = new URL(webkitEndpoint);
+  if (endpoint.protocol !== 'ws:' || endpoint.hostname !== '127.0.0.1' || endpoint.username || endpoint.password) {
+    throw new Error('The optional WebKit test server must be loopback-only');
+  }
+}
+if (!['free', 'hobby', 'paid', 'internal'].includes(fixturePlan)) throw new Error('Invalid Portfolio E2E plan');
 const FIREBASE_TOOLS = 'firebase-tools@15.19.0';
 const children = [];
 const isolatedConfig = mkdtempSync(join(tmpdir(), 'portfolio-openrtc-e2e-'));
@@ -69,15 +78,16 @@ function prepareLocalConfig() {
   cpSync(join(OPENRTC_FIREBASE, 'functions', 'package.json'), join(functionsDir, 'package.json'));
   symlinkSync(join(OPENRTC_FIREBASE, 'functions', 'node_modules'), join(functionsDir, 'node_modules'));
   const canonical = JSON.parse(readFileSync(join(OPENRTC_FIREBASE, 'firebase.json'), 'utf8'));
+  const canonicalGateway = JSON.parse(readFileSync(join(OPENRTC_GATEWAY, 'wrangler.jsonc'), 'utf8').replace(/^\s*\/\/.*$/gm, ''));
   const emulators = Object.fromEntries(['functions', 'hosting', 'firestore', 'auth', 'hub', 'logging', 'eventarc', 'tasks']
     .map(name => [name, { host: '127.0.0.1', port: ports[name] }]));
   emulators.firestore.websocketPort = ports.firestoreWebsocket;
   emulators.ui = { enabled: false };
   emulators.singleProjectMode = true;
   writeFileSync(join(isolatedConfig, 'firebase.json'), JSON.stringify({
-    functions: [{ source: functionsDir, codebase: 'default', disallowLegacyRuntimeConfig: true }],
+    functions: [{ source: 'functions', codebase: 'default', disallowLegacyRuntimeConfig: true }],
     firestore: { rules: join(OPENRTC_FIREBASE, 'firestore.rules'), indexes: join(OPENRTC_FIREBASE, 'firestore.indexes.json') },
-    hosting: { public: publicDir, rewrites: canonical.hosting.find(entry => entry.target === 'api').rewrites.filter(entry => entry.function) },
+    hosting: { public: 'public', rewrites: canonical.hosting.find(entry => entry.target === 'api').rewrites.filter(entry => entry.function) },
     emulators,
   }));
   const gatewayEntry = join(OPENRTC_GATEWAY, 'src', 'index.ts');
@@ -96,7 +106,7 @@ function prepareLocalConfig() {
       MANAGED_ROOM_FANOUT_MODE: 'off' },
     durable_objects: { bindings: [{ name: 'AVENUES', class_name: 'CoordinationAvenue' }, { name: 'BUDGETS', class_name: 'DeveloperBudget' }] },
     migrations: [{ tag: 'v1', new_sqlite_classes: ['CoordinationAvenue', 'DeveloperBudget'] }],
-    ratelimits: [{ name: 'EDGE_IP_RATE_LIMITER', namespace_id: '1', simple: { limit: 600, period: 60 } }],
+    ratelimits: canonicalGateway.ratelimits,
   }), { mode: 0o600 });
   log(`runId=${runId} project=${PROJECT} consumer=emulator platform=emulator sdk=${OPENRTC_ROOT}`);
 }
@@ -233,6 +243,7 @@ function spawnFirebase() {
       CLOUDSDK_CONFIG: isolatedConfig,
       GOOGLE_APPLICATION_CREDENTIALS: blockedAdc,
       OPENRTC_USAGE_METERING_MODE: 'enforce',
+      OPENRTC_RELAY_ACCOUNTING_MODE: 'external',
       OPENRTC_SIGNING_PRIVATE_JWK: JSON.stringify(privateJwk),
       OPENRTC_COORDINATION_GATEWAY_URL: GATEWAY,
       OPENRTC_EMULATOR_COORDINATION_GATEWAY_SIGNING_SECRET: SIGNING_SECRET,
@@ -277,14 +288,16 @@ function adminServices() {
 async function seedPortfolioApp() {
   const { admin, db } = adminServices();
   const appTag = `app_${API_KEY.slice(-16)}`;
-  await db.collection('developer_accounts').doc(runId).create({ uid: runId, plan: 'free', status: 'active', activeAppCount: 1,
+  // Keep Free as the default acceptance gate; explicit internal-tier transport
+  // diagnostics never count as evidence for the failing Free budget case.
+  await db.collection('developer_accounts').doc(runId).create({ uid: runId, plan: fixturePlan, status: 'active', activeAppCount: 1,
     createdAt: admin.firestore.Timestamp.now(), updatedAt: admin.firestore.Timestamp.now() });
   await db.collection('developer_apps').doc(API_KEY).create({
     apiKey: API_KEY,
     appName: 'Portfolio Cursor Emulator',
     appTag,
     ownerId: runId,
-    plan: 'free',
+    plan: fixturePlan,
     status: 'active',
     capabilityManifest: {
       schemaVersion: 2,
@@ -373,6 +386,7 @@ async function main() {
   ].join('\n'));
 
   const browserEnv = {
+    ...(webkitEndpoint ? { PORTFOLIO_WEBKIT_WS_ENDPOINT: webkitEndpoint } : {}),
     VITE_OPENRTC_API_KEY: API_KEY, PORTFOLIO_OPENRTC_TESTING_ALIAS: testingAlias,
     PORTFOLIO_OPENRTC_EMULATOR_API_TARGET: CONTROL_PLANE, PORTFOLIO_E2E_PORT: String(ports.web),
     PORTFOLIO_E2E_RUN_ID: runId,

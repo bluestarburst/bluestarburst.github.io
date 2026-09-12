@@ -51,10 +51,41 @@ Browser assertions require the run ID embedded in the test-only SDK alias.
 The relay URL comes from the owned, manifested child stdout and must be HTTPS
 loopback; it is not reused from a preexisting listener.
 
-The Chromium/Firefox test disables BroadcastChannel in both browsers, checks
+The Chromium/Firefox and Chromium/WebKit tests disable BroadcastChannel in both browsers, check
 zero local-tab peers, and verifies exact cursor payloads in both directions.
 Its success would prove this source-specific local connectivity lane, not
 heavy workload acceptance, deployed policy, newest-package interoperability,
 invoice reconciliation, or production readiness. The seeded Free app's
 manifest is a small connectivity fixture, not proof of every subscription
 tier or the 1,000-visit workload.
+
+## Independent WebKit host
+
+An optional `PORTFOLIO_WEBKIT_WS_ENDPOINT=ws://127.0.0.1:<port>/` selects an
+owned local Playwright server for WebKit only. The server must match the
+installed Playwright version; the runner rejects non-loopback endpoints.
+The connection forwards loopback network requests to the test host, preserving
+the same ephemeral Functions, gateway, relay, and consumer URLs. All cursor,
+identity, and error assertions remain enabled. Stop the owned server afterward.
+See [Playwright's Docker server instructions](https://playwright.dev/docs/docker#remote-connection).
+
+This supports independent Linux WebKit verification when macOS test-browser
+CryptoKey persistence is blocked on Keychain access. It does not waive Safari
+or physical-iPhone verification and must not change identity extractability,
+Keychain permissions, or application storage behavior.
+
+`PORTFOLIO_E2E_PLAN` defaults to `free`; explicit `hobby`, `paid`, or `internal`
+fixtures are separate diagnostics. A passing internal fixture never counts as
+Free-tier or approved first-party financial-policy acceptance.
+
+The low-level relay regression can also be run with the same two artifact
+environment variables:
+
+```sh
+node --test tests/integration/iroh-relay-tls.node.mjs
+```
+
+It validates current artifacts and exercises WebKit relay connectivity plus
+managed ticket creation. Default hosted relays use normal TLS validation; only
+the owned self-signed loopback relay relaxes certificate trust. It is not a
+substitute for the complete cross-browser suite.

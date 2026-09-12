@@ -1,4 +1,4 @@
-import { expect, firefox, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, firefox, webkit, test, type BrowserContext, type Page } from '@playwright/test';
 
 interface CursorPosition {
   x: number;
@@ -13,6 +13,7 @@ async function openPortfolioPeer(
 ): Promise<Page> {
   const page = await context.newPage();
   const errors: string[] = [];
+  const startupStages: string[] = [];
   browserErrors.set(page, errors);
   const isExpectedRoomControlFlow = (message: string) =>
     message === 'Failed to load resource: the server responded with a status of 404 ()'
@@ -23,12 +24,23 @@ async function openPortfolioPeer(
 
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => {
+    const stage = message.text().match(/\bstage=([a-z0-9_:-]+)/i)?.[1];
+    if (stage) startupStages.push(stage);
+    const heading = message.text().match(/^(?:\[[A-Za-z][A-Za-z0-9 _-]{0,60}\])+/)?.[0];
+    if (heading && !stage && startupStages.length < 100) startupStages.push(heading);
     if (message.type() === 'error' && !isExpectedRoomControlFlow(message.text())) {
       errors.push(message.text());
     }
   });
 
+  const capabilityResponse = page.waitForResponse(response =>
+    new URL(response.url()).pathname === '/v2/capabilities'
+      && response.request().method() === 'POST');
   await page.goto(`/?peer=${label}`, { waitUntil: 'domcontentloaded' });
+  const admission = await capabilityResponse;
+  const capability = await admission.json();
+  expect(admission.status(), `${label} capability admission`).toBe(200);
+  expect(capability.irohRelay, `${label} external Iroh relay access`).toBe(true);
   if (process.env.PORTFOLIO_E2E_RUN_ID) {
     await expect.poll(() => page.evaluate(() => (window as unknown as {
       __portfolioHarnessIdentity?: { runId: string };
@@ -37,7 +49,16 @@ async function openPortfolioPeer(
   const presence = page.getByTestId('openrtc-presence');
   // Allow the bounded 60-second verification attempt to settle before diagnosing
   // startup. Cursor delivery retains the shorter default assertion deadline.
-  await expect(presence).toHaveAttribute('data-openrtc-status', 'Joined', { timeout: 75_000 });
+  try {
+    await expect(presence).toHaveAttribute('data-openrtc-status', 'Joined', { timeout: 75_000 });
+  } catch (error) {
+    // No capability bodies, headers, tokens or session identities in diagnostics.
+    console.error(JSON.stringify({ peer: label, startupStages,
+      errorKinds: errors.map(text => /certificate/i.test(text) ? 'certificate'
+        : /WebAssembly|wasm/i.test(text) ? 'wasm'
+        : /WebGL|context lost/i.test(text) ? 'graphics' : 'other') }));
+    throw error;
+  }
   expect(errors, `${label} browser errors`).toEqual([]);
   return page;
 }
@@ -99,8 +120,12 @@ test('two independent portfolio devices exchange exact space.state cursor payloa
   }
 });
 
-test('Chromium and Firefox exchange exact cursors without BroadcastChannel', async ({ browser, baseURL, ignoreHTTPSErrors }) => {
-  const otherBrowser = await firefox.launch();
+for (const browserType of [firefox, webkit]) {
+test(`Chromium and ${browserType.name()} exchange exact cursors without BroadcastChannel`, async ({ browser, baseURL, ignoreHTTPSErrors }) => {
+  const endpoint = browserType === webkit ? process.env.PORTFOLIO_WEBKIT_WS_ENDPOINT : undefined;
+  const otherBrowser = endpoint
+    ? await browserType.connect(endpoint, { exposeNetwork: '<loopback>' })
+    : await browserType.launch();
   const contexts = await Promise.all([
     browser.newContext({ baseURL, ignoreHTTPSErrors }),
     otherBrowser.newContext({ baseURL, ignoreHTTPSErrors }),
@@ -113,7 +138,7 @@ test('Chromium and Firefox exchange exact cursors without BroadcastChannel', asy
     }
     const [left, right] = await Promise.all([
       openPortfolioPeer(contexts[0], 'chromium-network'),
-      openPortfolioPeer(contexts[1], 'firefox-network'),
+      openPortfolioPeer(contexts[1], `${browserType.name()}-network`),
     ]);
     for (const page of [left, right]) {
       expect(await page.evaluate(() => typeof BroadcastChannel)).toBe('undefined');
@@ -134,6 +159,7 @@ test('Chromium and Firefox exchange exact cursors without BroadcastChannel', asy
     await otherBrowser.close();
   }
 });
+}
 
 test('same-browser tabs exchange exact cursors through OpenRTC', async ({ browser, baseURL, ignoreHTTPSErrors }) => {
   const context = await browser.newContext({ baseURL, ignoreHTTPSErrors });
