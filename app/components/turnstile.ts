@@ -11,6 +11,15 @@ type Api = {
 };
 declare global { interface Window { turnstile?: Api } }
 
+const RETRYABLE_ERROR_CODES = new Set(['110600', '110620', '200500']);
+
+function isRetryableErrorCode(code: unknown): boolean {
+    if (typeof code !== 'string') return false;
+    return RETRYABLE_ERROR_CODES.has(code)
+        || code.startsWith('300')
+        || code.startsWith('600');
+}
+
 let scriptPromise: Promise<Api> | undefined;
 function loadTurnstile(): Promise<Api> {
     if (window.turnstile) return Promise.resolve(window.turnstile);
@@ -65,7 +74,7 @@ export function createTurnstileProvider(): (BotVerificationProvider & { close():
         owner.container.remove();
     };
     return {
-        getToken: () => {
+        getToken: ({ action }) => {
             if (closed) return Promise.reject(new Error('Turnstile provider is closed'));
             if (current) return Promise.reject(new Error('Turnstile request already in progress'));
             const container = document.createElement('div');
@@ -83,17 +92,26 @@ export function createTurnstileProvider(): (BotVerificationProvider & { close():
                 owner.api = api;
                 const widget = api.render(container, {
                     sitekey: SITE_KEY,
-                    action: 'portfolio_join',
+                    action,
                     execution: 'execute',
                     appearance: 'interaction-only',
-                    retry: 'never',
-                    'refresh-expired': 'never',
-                    'refresh-timeout': 'never',
+                    retry: 'auto',
+                    'retry-interval': 2_000,
+                    'refresh-expired': 'auto',
+                    'refresh-timeout': 'auto',
                     'response-field': false,
                     callback: (token: string) => settle(owner, undefined, token),
-                    'error-callback': () => settle(owner, new Error('Turnstile verification failed')),
+                    'error-callback': (code: unknown) => {
+                        // Cloudflare retries transient iframe, network, and challenge
+                        // failures automatically. Keep the OpenRTC request pending so
+                        // mobile Safari can recover within the bounded owner timeout.
+                        if (!isRetryableErrorCode(code)) {
+                            settle(owner, new Error('Turnstile verification failed'));
+                        }
+                    },
                     'expired-callback': () => settle(owner, new Error('Turnstile token expired')),
-                    'timeout-callback': () => settle(owner, new Error('Turnstile verification timed out')),
+                    // Managed widgets refresh interactive timeouts automatically.
+                    'timeout-callback': () => {},
                     'unsupported-callback': () => settle(owner, new Error('Turnstile browser unsupported')),
                 });
                 if (current !== owner) { removeWidget(api, widget); return; }

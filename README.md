@@ -42,23 +42,23 @@ Set the public `VITE_TURNSTILE_SITE_KEY` in the selected local Vite overlay and
 the GitHub Actions repository variable of the same name. The secret must never
 be in this repository or a Vite variable: OpenRTC's existing backend reads its
 Secret Manager reference from the Portfolio app's Turnstile configuration.
-Both sides use action `portfolio_join`; production verification must allow only
+Both sides use the OpenRTC SDK action `openrtc_capability`; production verification must allow only
 the deployed Portfolio hostname, never localhost. Keep local test identity and
 hostname configuration separate from production.
 
 The managed widget appears only when interaction is needed, obtains a fresh
 single-use token for each anonymous capability request, and is removed on
 settlement or unmount. Script loading is bounded to ten seconds; a challenge has
-up to one minute. Verification failure leaves the portfolio viewable and settles
-the cursor status. There is no BroadcastChannel fallback or app-level reconnect
-loop. Unit tests use a simulated widget API; they do not prove real verification
-or cross-browser transport. Before enabling backend enforcement, configure the
-real key/secret pair and prove a fresh request succeeds and token replay fails.
-Do not use Cloudflare testing keys against the production app.
-
-Hosted widget provisioning and backend enforcement are not yet activated by this
-source change. An absent site key omits the SDK verification callback during the
-additive rollout; a backend requiring Turnstile still rejects missing evidence.
+up to one minute. Cloudflare-owned retryable iframe, network, challenge, and
+interactive-timeout failures stay pending for the widget's automatic retry;
+permanent configuration failures settle the cursor status. There is no
+BroadcastChannel fallback or app-level reconnect loop. Unit tests use a
+simulated widget API; they do not prove real verification or cross-browser
+transport. Production uses the Portfolio widget and OpenRTC application
+configuration for `hargreaves.dev`; keep the Cloudflare site key, Secret Manager
+secret, action, and hostname policy aligned. Do not use Cloudflare testing keys
+against the production app. An absent site key omits the SDK verification
+callback, while production backend enforcement rejects missing evidence.
 
 `pnpm test:connectivity` builds the production client and verifies isolated
 Chromium contexts, a separate Chromium + Firefox pair, and same-browser tabs.
