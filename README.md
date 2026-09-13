@@ -83,8 +83,11 @@ It does not change production build variables or upload browser traces.
 This proves frontend integration, not server verification, real-token replay
 protection, or cursor delivery. The live Siteverify dummy-key response may omit
 the action required by OpenRTC; never weaken action/hostname checks to accept it.
-Production challenges can reject browser automation, so the real-widget network
-gate remains separate and currently unverified. See [Cloudflare testing
+Production challenges can reject browser automation, so CI never runs the real
+production site key in a headless browser. The deployment workflow uses
+Cloudflare's official Invisible test key before upload, verifies the published
+privacy disclosure afterward, and leaves real production admission to a bounded
+operator smoke in visible browsers. See [Cloudflare testing
 guidance](https://developers.cloudflare.com/turnstile/troubleshooting/testing/).
 
 The public demo requests OpenRTC's `privacy: 'relay-only'` policy: no direct
