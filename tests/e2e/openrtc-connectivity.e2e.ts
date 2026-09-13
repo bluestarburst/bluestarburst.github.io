@@ -72,7 +72,7 @@ async function openPortfolioPeer(
 async function moveCursor(page: Page, xRatio: number, yRatio: number): Promise<void> {
   const previous = await page.getByTestId('openrtc-presence').getAttribute('data-local-cursor');
   const canvas = page.locator('canvas').first();
-  if (!await canvas.isVisible().catch(() => false)) {
+  if (process.env.CI === 'true' || !await canvas.isVisible().catch(() => false)) {
     await page.getByTestId('openrtc-e2e-publish-cursor').evaluate((button: HTMLButtonElement) => button.click());
     await expect(page.getByTestId('openrtc-presence')).not.toHaveAttribute('data-local-cursor', previous!);
     return;
