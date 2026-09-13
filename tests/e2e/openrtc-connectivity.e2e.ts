@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, firefox, test, type BrowserContext, type Page } from '@playwright/test';
 
 interface CursorPosition {
   x: number;
@@ -28,14 +28,33 @@ async function openPortfolioPeer(
     }
   });
 
+  const capabilityResponse = page.waitForResponse(response =>
+    new URL(response.url()).pathname === '/v2/capabilities'
+      && response.request().method() === 'POST');
   await page.goto(`/?peer=${label}`, { waitUntil: 'domcontentloaded' });
+  const admission = await capabilityResponse;
+  const capability = await admission.json();
+  const denial = JSON.stringify({ code: capability.code, scope: capability.scope,
+    operation: capability.operation, retryAfterMs: capability.retryAfterMs });
+  expect(admission.status(), `${label} capability admission ${denial}`).toBe(200);
+  // Relay-only Portfolio cannot start when the backend advertises no Iroh
+  // relay access. Assert only this public flag, never print the bearer token.
+  expect(capability.irohRelay, `${label} external Iroh relay access`).toBe(true);
+  if (process.env.PORTFOLIO_E2E_RUN_ID) {
+    await expect.poll(() => page.evaluate(() => (window as unknown as {
+      __portfolioHarnessIdentity?: { runId: string };
+    }).__portfolioHarnessIdentity?.runId)).toBe(process.env.PORTFOLIO_E2E_RUN_ID);
+  }
   const presence = page.getByTestId('openrtc-presence');
-  await expect(presence).toHaveAttribute('data-openrtc-status', 'Joined');
+  // Allow the bounded 60-second verification attempt to settle before diagnosing
+  // startup. Cursor delivery retains the shorter default assertion deadline.
+  await expect(presence).toHaveAttribute('data-openrtc-status', 'Joined', { timeout: 75_000 });
   expect(errors, `${label} browser errors`).toEqual([]);
   return page;
 }
 
 async function moveCursor(page: Page, xRatio: number, yRatio: number): Promise<void> {
+  const previous = await page.getByTestId('openrtc-presence').getAttribute('data-local-cursor');
   const canvas = page.locator('canvas').first();
   await expect(canvas).toBeVisible();
   const bounds = await canvas.boundingBox();
@@ -44,6 +63,7 @@ async function moveCursor(page: Page, xRatio: number, yRatio: number): Promise<v
     bounds!.x + bounds!.width * xRatio,
     bounds!.y + bounds!.height * yRatio,
   );
+  await expect(page.getByTestId('openrtc-presence')).not.toHaveAttribute('data-local-cursor', previous!);
 }
 
 async function readCursorAttribute<T>(page: Page, name: string): Promise<T> {
@@ -62,9 +82,9 @@ async function expectExactCursor(source: Page, target: Page): Promise<CursorPosi
   return cursor!;
 }
 
-test('two independent portfolio devices exchange exact space.state cursor payloads', async ({ browser }) => {
-  const leftContext = await browser.newContext();
-  const rightContext = await browser.newContext();
+test('two independent portfolio devices exchange exact space.state cursor payloads', async ({ browser, baseURL, ignoreHTTPSErrors }) => {
+  const leftContext = await browser.newContext({ baseURL, ignoreHTTPSErrors });
+  const rightContext = await browser.newContext({ baseURL, ignoreHTTPSErrors });
 
   try {
     const left = await openPortfolioPeer(leftContext, 'left');
@@ -90,8 +110,44 @@ test('two independent portfolio devices exchange exact space.state cursor payloa
   }
 });
 
-test('two pages sharing one browser device exchange cursors locally', async ({ browser }) => {
-  const context = await browser.newContext();
+test('Chromium and Firefox exchange exact cursors without BroadcastChannel', async ({ browser, baseURL, ignoreHTTPSErrors }) => {
+  const otherBrowser = await firefox.launch();
+  const contexts = await Promise.all([
+    browser.newContext({ baseURL, ignoreHTTPSErrors }),
+    otherBrowser.newContext({ baseURL, ignoreHTTPSErrors }),
+  ]);
+  try {
+    for (const context of contexts) {
+      await context.addInitScript(() => {
+        Object.defineProperty(globalThis, 'BroadcastChannel', { value: undefined, configurable: false });
+      });
+    }
+    const [left, right] = await Promise.all([
+      openPortfolioPeer(contexts[0], 'chromium-network'),
+      openPortfolioPeer(contexts[1], 'firefox-network'),
+    ]);
+    for (const page of [left, right]) {
+      expect(await page.evaluate(() => typeof BroadcastChannel)).toBe('undefined');
+      await expect(page.getByTestId('openrtc-presence')).toHaveAttribute('data-local-tab-peer-count', '0');
+      await expect.poll(async () => Number(await page.getByTestId('openrtc-presence')
+        .getAttribute('data-openrtc-connection-count'))).toBeGreaterThanOrEqual(1);
+    }
+    await moveCursor(left, 0.28, 0.38);
+    await expectExactCursor(left, right);
+    await moveCursor(right, 0.72, 0.62);
+    await expectExactCursor(right, left);
+    for (const page of [left, right]) {
+      await expect(page.getByTestId('openrtc-presence')).toHaveAttribute('data-local-tab-peer-count', '0');
+      expect(browserErrors.get(page), 'cross-browser errors').toEqual([]);
+    }
+  } finally {
+    await Promise.all(contexts.map((context) => context.close()));
+    await otherBrowser.close();
+  }
+});
+
+test('same-browser tabs exchange exact cursors through OpenRTC', async ({ browser, baseURL, ignoreHTTPSErrors }) => {
+  const context = await browser.newContext({ baseURL, ignoreHTTPSErrors });
 
   try {
     const left = await openPortfolioPeer(context, 'same-device-left');
@@ -99,10 +155,11 @@ test('two pages sharing one browser device exchange cursors locally', async ({ b
     const leftPresence = left.getByTestId('openrtc-presence');
     const rightPresence = right.getByTestId('openrtc-presence');
 
-    await expect.poll(async () => Number(await leftPresence.getAttribute('data-local-tab-peer-count')))
-      .toBeGreaterThanOrEqual(1);
-    await expect.poll(async () => Number(await rightPresence.getAttribute('data-local-tab-peer-count')))
-      .toBeGreaterThanOrEqual(1);
+    for (const presence of [leftPresence, rightPresence]) {
+      await expect(presence).toHaveAttribute('data-local-tab-peer-count', '0');
+      await expect.poll(async () => Number(await presence.getAttribute('data-openrtc-connection-count')))
+        .toBeGreaterThanOrEqual(1);
+    }
 
     await moveCursor(left, 0.25, 0.35);
     await expectExactCursor(left, right);

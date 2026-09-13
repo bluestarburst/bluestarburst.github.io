@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   getSpaceId,
+  cursorErrorStatus,
   isSpaceFullError,
   joinAvailableSpace,
   SPACE_PREFIX,
@@ -15,15 +16,21 @@ function mockClient(join: SpaceClientLike<Space>['spaces']['join']): SpaceClient
 }
 
 describe('cursor capability-space sharding', () => {
-  it('uses direct P2P first without forcing the managed relay path', () => {
+  it('renders safe actionable billing labels instead of hiding errors behind a cursor count', () => {
+    expect(cursorErrorStatus({ code: 'credit-exhausted' })).toBe('Account credits exhausted');
+    expect(cursorErrorStatus({ code: 'app-rate-limited' })).toBe('Cursor app temporarily rate limited');
+    expect(cursorErrorStatus({ code: 'room-capacity-exceeded' })).toBe('No available cursor space found');
+    expect(cursorErrorStatus(new Error('private credential material'))).toBe('Cursor connection failed');
+  });
+  it('keeps public cursor addresses private with the SDK relay-only policy', () => {
     const component = readFileSync(
       new URL('./SharedCursors.tsx', import.meta.url),
       'utf8',
     );
     expect(component).toContain('iroh: true');
-    expect(component).toContain("webrtc: { implementation: 'iroh-carrier' }");
-    expect(component).not.toContain("privacy: 'relay-only'");
-    expect(component).not.toContain('relay: true');
+    expect(component).toContain('webrtc: true');
+    expect(component).toContain("privacy: 'relay-only'");
+    expect(component).toContain('relay: true');
   });
 
   it('uses latest-state without taking over peer lifecycle', () => {
@@ -44,11 +51,31 @@ describe('cursor capability-space sharding', () => {
     expect(() => getSpaceId(-1)).toThrow(/non-negative/);
   });
 
-  it('classifies only capacity and budget admission failures as shard-full', () => {
+  it('classifies only explicit room capacity as shard-full', () => {
     expect(isSpaceFullError(new Error('space is full'))).toBe(true);
-    expect(isSpaceFullError(new Error('budget-exhausted'))).toBe(true);
-    expect(isSpaceFullError(new Error('HTTP 429'))).toBe(true);
+    expect(isSpaceFullError({ code: 'room-capacity-exceeded' })).toBe(true);
+    expect(isSpaceFullError(new Error('budget-exhausted'))).toBe(false);
+    expect(isSpaceFullError(new Error('HTTP 429'))).toBe(false);
     expect(isSpaceFullError(new Error('unauthorized'))).toBe(false);
+  });
+
+  it.each([
+    'credit-exhausted', 'app-budget-exhausted', 'app-rate-limited',
+    'principal-rate-limited', 'edge-rate-limited', 'provider-safety-paused',
+    'usage-price-stale', 'relay-budget-exhausted', 'resource-exhausted',
+  ])('does not multiply admission requests after %s', async (code) => {
+    const error = Object.assign(new Error('space is full'), { code, retryable: false });
+    const join = vi.fn(async (_id: string) => { throw error; });
+    await expect(joinAvailableSpace(mockClient(join))).rejects.toBe(error);
+    expect(join).toHaveBeenCalledTimes(1);
+  });
+
+  it('bounds capacity probing without visiting every configured shard', async () => {
+    const error = Object.assign(new Error('capacity denied'), { code: 'room-capacity-exceeded' });
+    const join = vi.fn(async (_id: string) => { throw error; });
+    await expect(joinAvailableSpace(mockClient(join))).rejects.toBe(error);
+    expect(join).toHaveBeenCalledTimes(16);
+    expect(new Set(join.mock.calls.map(([id]) => id)).size).toBe(16);
   });
 
   it('joins one session latest-state capability space', async () => {
@@ -76,6 +103,14 @@ describe('cursor capability-space sharding', () => {
     expect(join).toHaveBeenCalledWith('portfolio-cursors-0', expect.objectContaining({ maxPeers: 8 }));
   });
 
+  it.each([{ shards: 513 }, { shards: 0 }, { startShard: -1 }, { startShard: 512 }, { startShard: 1.5 }])(
+    'rejects invalid placement bounds before contacting OpenRTC: %j', async (options) => {
+      const join = vi.fn(async (id: string) => ({ id }));
+      await expect(joinAvailableSpace(mockClient(join), options)).rejects.toThrow();
+      expect(join).not.toHaveBeenCalled();
+    },
+  );
+
   it('walks to the next shard after a bounded capacity denial', async () => {
     const join = vi.fn()
       .mockRejectedValueOnce(new Error('space is full'))
@@ -95,9 +130,9 @@ describe('cursor capability-space sharding', () => {
       .rejects.toThrow('unauthorized');
     expect(denied).toHaveBeenCalledTimes(1);
 
-    const full = vi.fn(async () => { throw new Error('resource-exhausted'); });
+    const full = vi.fn(async () => { throw new Error('space is full'); });
     await expect(joinAvailableSpace(mockClient(full), { shards: 3, startShard: 0 }))
-      .rejects.toThrow('resource-exhausted');
+      .rejects.toThrow('space is full');
     expect(full).toHaveBeenCalledTimes(3);
   });
 });
