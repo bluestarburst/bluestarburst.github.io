@@ -28,7 +28,18 @@ async function openPortfolioPeer(
     }
   });
 
+  const capabilityResponse = page.waitForResponse(response =>
+    new URL(response.url()).pathname === '/v2/capabilities'
+      && response.request().method() === 'POST');
   await page.goto(`/?peer=${label}`, { waitUntil: 'domcontentloaded' });
+  const admission = await capabilityResponse;
+  const capability = await admission.json();
+  const denial = JSON.stringify({ code: capability.code, scope: capability.scope,
+    operation: capability.operation, retryAfterMs: capability.retryAfterMs });
+  expect(admission.status(), `${label} capability admission ${denial}`).toBe(200);
+  // Relay-only Portfolio cannot start when the backend advertises no Iroh
+  // relay access. Assert only this public flag, never print the bearer token.
+  expect(capability.irohRelay, `${label} external Iroh relay access`).toBe(true);
   if (process.env.PORTFOLIO_E2E_RUN_ID) {
     await expect.poll(() => page.evaluate(() => (window as unknown as {
       __portfolioHarnessIdentity?: { runId: string };
