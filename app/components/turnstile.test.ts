@@ -68,7 +68,14 @@ describe('Portfolio Turnstile admission', () => {
         const p = await provider();
         const first = p.getToken(input);
         await flush();
-        expect(callbacks[0]).toMatchObject({ action: 'portfolio_join', retry: 'never', execution: 'execute' });
+        expect(callbacks[0]).toMatchObject({
+            action: 'openrtc_capability',
+            retry: 'auto',
+            'retry-interval': 2_000,
+            'refresh-expired': 'auto',
+            'refresh-timeout': 'auto',
+            execution: 'execute',
+        });
         callbacks[0].callback('first');
         await expect(first).resolves.toBe('first');
         const second = p.getToken(input);
@@ -111,7 +118,7 @@ describe('Portfolio Turnstile admission', () => {
         await expect(retry).resolves.toBe('fresh');
     });
 
-    it.each(['error-callback', 'expired-callback', 'timeout-callback', 'unsupported-callback'])('settles %s', async (callback) => {
+    it.each(['expired-callback', 'unsupported-callback'])('settles %s', async (callback) => {
         const p = await provider();
         const pending = p.getToken(input);
         const rejected = expect(pending).rejects.toThrow('Turnstile');
@@ -120,6 +127,38 @@ describe('Portfolio Turnstile admission', () => {
         await rejected;
         expect(vi.getTimerCount()).toBe(0);
         expect(api.remove).toHaveBeenCalledWith('1');
+    });
+
+    it.each(['110600', '110620', '200500', '300030', '600010'])('keeps retryable error %s pending until recovery', async (code) => {
+        const p = await provider();
+        const pending = p.getToken(input);
+        await flush();
+        callbacks[0]['error-callback'](code);
+        expect(api.remove).not.toHaveBeenCalled();
+        callbacks[0].callback('recovered');
+        await expect(pending).resolves.toBe('recovered');
+        expect(api.remove).toHaveBeenCalledWith('1');
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('keeps a managed interactive timeout pending for automatic refresh', async () => {
+        const p = await provider();
+        const pending = p.getToken(input);
+        await flush();
+        callbacks[0]['timeout-callback']();
+        expect(api.remove).not.toHaveBeenCalled();
+        callbacks[0].callback('refreshed');
+        await expect(pending).resolves.toBe('refreshed');
+    });
+
+    it.each(['110100', '110110', '110200', '200100', '400020', '400070'])('settles non-retryable error %s', async (code) => {
+        const p = await provider();
+        const pending = expect(p.getToken(input)).rejects.toThrow('Turnstile');
+        await flush();
+        callbacks[0]['error-callback'](code);
+        await pending;
+        expect(api.remove).toHaveBeenCalledWith('1');
+        expect(vi.getTimerCount()).toBe(0);
     });
 
     it.each(['render', 'execute'] as const)('settles a thrown %s without leaving a pending request', async method => {
