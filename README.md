@@ -106,7 +106,7 @@ the integrated provider-work measurements. In particular, the post-join SDK
 observation gap below still needs resolution; a capacity mock is not proof that
 the published runtime reports the rejection at this boundary.
 
-Dependency upgrade checkpoint (2026-09-10): published `openrtc@2.5.4`, with
+Dependency upgrade checkpoint (2026-09-13): published `openrtc@2.7.0`, with
 19 unit tests, typecheck, and production build passing. At source
 `835bf703dacf9776a9cbbfcd5815ccf5a079b964`, the full connectivity suite passed
 3/3 in 53.1 seconds: independent Chromium contexts, actual Chromium + Firefox
@@ -126,7 +126,7 @@ do not replace the pending source-current cross-browser run.
 Cursor movement now uses an application publication cap of 20 Hz: each 50 ms
 window sends its latest value to SDK state and local broadcast, while the local
 cursor remains responsive every frame. Partial windows flush once; idle periods
-schedule nothing, and unmount cancels pending publication. SDK 2.5.4 coalesces
+schedule nothing, and unmount cancels pending publication. SDK 2.7.0 coalesces
 backpressured latest-state sends but does not impose this frequency ceiling.
 Fake-clock tests exercise 1,000 movement updates over one second and observe
 exactly 20 publications, including the final value, plus idle/unmount checks.
@@ -139,7 +139,7 @@ relay-only privacy.
 ### Pending SDK error-observation contract
 
 The settled error labels above cover rejected `spaces.join()` calls only.
-Published OpenRTC 2.5.4 does not expose an avenue coordination-error/status
+Published OpenRTC 2.7.0 does not expose an avenue coordination-error/status
 subscription. Its `diagnostics.onStateChange` observes peer route states;
 `diagnostics.status()` reports runtime/WASM identity, not gateway admission.
 Its public `RTCError` also lacks `retryAfterMs` and `resetAt`. Therefore the

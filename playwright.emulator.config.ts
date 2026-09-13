@@ -19,7 +19,8 @@ export default defineConfig({
     // The deterministic loopback Iroh relay uses its harness-generated TLS
     // certificate. Production relay certificates remain browser-validated.
     ignoreHTTPSErrors: true,
-    trace: 'retain-on-failure',
+    // Capability responses contain credentials; retain assertion diagnostics only.
+    trace: 'off',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
