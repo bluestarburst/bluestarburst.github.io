@@ -9,10 +9,7 @@ import { transformWithEsbuild } from 'vite';
 // Official public test keys only. No OpenRTC identity, backend, secret store,
 // production widget, or application build configuration is used by this test.
 // https://developers.cloudflare.com/turnstile/troubleshooting/testing/
-const cases = [
-  { name: 'pass', key: '1x00000000000000000000AA' },
-  { name: 'fail', key: '2x00000000000000000000AB' },
-];
+const cases = [{ name: 'pass', key: '1x00000000000000000000BB' }];
 const source = await readFile(new URL('../../app/components/turnstile.ts', import.meta.url), 'utf8');
 const modules = new Map(await Promise.all(cases.map(async ({ name, key }) => {
   const result = await transformWithEsbuild(source, 'turnstile.ts', {
@@ -22,7 +19,7 @@ const modules = new Map(await Promise.all(cases.map(async ({ name, key }) => {
 })));
 
 for (const browserType of [chromium, firefox]) {
-  test(`${browserType.name()}: real test widget settles success and rejection`, { timeout: 150_000 }, async () => {
+  test(`${browserType.name()}: invisible test widget settles success`, { timeout: 60_000 }, async () => {
     const server = createServer((request, response) => {
       const module = modules.get(request.url);
       if (module) {
@@ -57,9 +54,7 @@ for (const browserType of [chromium, firefox]) {
           }
           return { ...result, remainingWidgets: document.querySelectorAll('[aria-label="Verify to join shared cursors"]').length };
         }, name);
-        assert.deepEqual(outcome, name === 'pass'
-          ? { accepted: true, dummy: true, remainingWidgets: 0 }
-          : { accepted: false, code: 'turnstile-unavailable', remainingWidgets: 0 });
+        assert.deepEqual(outcome, { accepted: true, dummy: true, remainingWidgets: 0 });
         await page.close();
       }
     } finally {

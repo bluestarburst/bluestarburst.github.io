@@ -46,12 +46,16 @@ Both sides use the OpenRTC SDK action `openrtc_capability`; production verificat
 the deployed Portfolio hostname, never localhost. Keep local test identity and
 hostname configuration separate from production.
 
-The managed widget appears only when interaction is needed, obtains a fresh
-single-use token for each anonymous capability request, and is removed on
-settlement or unmount. Script loading is bounded to ten seconds; a challenge has
-up to one minute. Cloudflare-owned retryable iframe, network, challenge, and
-interactive-timeout failures stay pending for the widget's automatic retry;
-permanent configuration failures settle the cursor status. There is no
+The production Cloudflare widget must use **Invisible** mode so verification
+runs in the background with no checkbox, spinner, or other in-app control. It
+obtains a fresh single-use token for each anonymous capability request and is
+removed on settlement or unmount. The site privacy page links Cloudflare's
+Turnstile Privacy Addendum as required for Invisible mode. Script loading is
+bounded to ten seconds; a challenge has up to one minute. Cloudflare-owned
+retryable iframe, network, and challenge failures stay pending for the widget's
+automatic retry; permanent configuration failures settle the cursor status. A
+pointer-enabled container is retained only as a safe configuration-drift
+fallback and must remain visually empty in production. There is no
 BroadcastChannel fallback or app-level reconnect loop. Unit tests use a
 simulated widget API; they do not prove real verification or cross-browser
 transport. Production uses the Portfolio widget and OpenRTC application
@@ -69,9 +73,12 @@ managed production OpenRTC service and therefore requires the portfolio
 `VITE_OPENRTC_API_KEY`; it is not a mocked transport test.
 
 `pnpm test:turnstile:integration` separately runs the actual widget helper in
-Chromium and Firefox against Cloudflare's official success/failure test sitekeys.
+Chromium and Firefox against Cloudflare's official Invisible success key.
+Permanent and retryable failure behavior remains covered by the bounded
+fake-clock unit tests because the official failing Invisible key intentionally
+uses the production retry window.
 It serves only the helper on an ephemeral loopback port, uses no OpenRTC app
-identity or backend, and checks token completion, rejection and widget cleanup.
+identity or backend, and checks token completion and widget cleanup.
 It does not change production build variables or upload browser traces.
 This proves frontend integration, not server verification, real-token replay
 protection, or cursor delivery. The live Siteverify dummy-key response may omit

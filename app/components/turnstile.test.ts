@@ -76,6 +76,7 @@ describe('Portfolio Turnstile admission', () => {
             'refresh-timeout': 'auto',
             execution: 'execute',
         });
+        expect(nodes[0].style).toMatchObject({ pointerEvents: 'auto' });
         callbacks[0].callback('first');
         await expect(first).resolves.toBe('first');
         const second = p.getToken(input);

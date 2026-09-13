@@ -352,7 +352,13 @@ export default function Home() {
         {/* Footer */}
         <footer className="mt-24 pt-8 border-t border-neutral-200 dark:border-neutral-800 text-center font-mono text-xs text-neutral-500 dark:text-neutral-600 pointer-events-auto transition-colors">
           <p>© {new Date().getFullYear()} Bryant Hargreaves. Built with React, Three.js & Tailwind.</p>
-          <p className="mt-2">System Status: Online</p>
+          <p className="mt-2">
+            System Status: Online
+            <span aria-hidden="true"> · </span>
+            <a className="underline underline-offset-4 hover:text-amber-700 dark:hover:text-[#d2b48c]" href="/privacy">
+              Privacy
+            </a>
+          </p>
         </footer>
 
       </div>

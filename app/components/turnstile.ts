@@ -79,7 +79,17 @@ export function createTurnstileProvider(): (BotVerificationProvider & { close():
             if (current) return Promise.reject(new Error('Turnstile request already in progress'));
             const container = document.createElement('div');
             container.setAttribute('aria-label', 'Verify to join shared cursors');
-            Object.assign(container.style, { position: 'fixed', right: '1rem', bottom: '1rem', zIndex: '10000' });
+            Object.assign(container.style, {
+                position: 'fixed',
+                right: '1rem',
+                bottom: '1rem',
+                zIndex: '10000',
+                // The production widget is configured as Invisible. Keep this
+                // interactive as a safe fallback if provider configuration ever
+                // drifts back to a visible mode; the page body disables pointer
+                // events for its decorative canvas by default.
+                pointerEvents: 'auto',
+            });
             document.body.appendChild(container);
             let owner!: Pending;
             const result = new Promise<string>((resolve, reject) => {
