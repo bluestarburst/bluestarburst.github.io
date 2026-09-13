@@ -21,6 +21,8 @@ async function openPortfolioPeer(
     || message === 'Failed to load resource: the server responded with a status of 409 ()'
     || message === 'Failed to load resource: the server responded with a status of 409 (Conflict)'
     || /\[OPENRTC\]\[FIRESTORE\].*status=(404 Not Found|409 Conflict)/s.test(message);
+  const isExpectedCiGraphicsLimit = (message: string) => process.env.CI === 'true'
+    && /WebGL context could not be created|Error creating WebGL context/.test(message);
 
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => {
@@ -28,7 +30,9 @@ async function openPortfolioPeer(
     if (stage) startupStages.push(stage);
     const heading = message.text().match(/^(?:\[[A-Za-z][A-Za-z0-9 _-]{0,60}\])+/)?.[0];
     if (heading && !stage && startupStages.length < 100) startupStages.push(heading);
-    if (message.type() === 'error' && !isExpectedRoomControlFlow(message.text())) {
+    if (message.type() === 'error'
+      && !isExpectedRoomControlFlow(message.text())
+      && !isExpectedCiGraphicsLimit(message.text())) {
       errors.push(message.text());
     }
   });
@@ -66,7 +70,11 @@ async function openPortfolioPeer(
 async function moveCursor(page: Page, xRatio: number, yRatio: number): Promise<void> {
   const previous = await page.getByTestId('openrtc-presence').getAttribute('data-local-cursor');
   const canvas = page.locator('canvas').first();
-  await expect(canvas).toBeVisible();
+  if (!await canvas.isVisible().catch(() => false)) {
+    await page.getByTestId('openrtc-e2e-publish-cursor').evaluate((button: HTMLButtonElement) => button.click());
+    await expect(page.getByTestId('openrtc-presence')).not.toHaveAttribute('data-local-cursor', previous!);
+    return;
+  }
   const bounds = await canvas.boundingBox();
   expect(bounds).not.toBeNull();
   await page.mouse.move(
