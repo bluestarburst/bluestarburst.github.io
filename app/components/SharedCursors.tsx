@@ -38,6 +38,7 @@ export function SharedCursors() {
     const [status, setStatus] = useState('Initializing...');
     const [activeMemberCount, setActiveMemberCount] = useState(0);
     const [myMousePosition, setMyMousePosition] = useState({ x: 0, z: 0 });
+    const [e2eCursorControlEnabled, setE2eCursorControlEnabled] = useState(false);
     const clientRef = useRef<Client | null>(null);
     const spaceRef = useRef<Space | null>(null);
     const cursorStateRef = useRef<State<CursorPosition> | null>(null);
@@ -53,6 +54,7 @@ export function SharedCursors() {
         let disposed = false;
         let turnstile: ReturnType<typeof createTurnstileProvider>;
         mountedRef.current = true;
+        setE2eCursorControlEnabled(new URLSearchParams(window.location.search).has('peer'));
         cursorPublisherRef.current = createCursorPublisher<CursorPosition>((payload) => {
             if (!mountedRef.current || !cursorStateRef.current) return;
             cursorStateRef.current.set(payload);
@@ -170,6 +172,16 @@ export function SharedCursors() {
 
     return (
         <>
+            {e2eCursorControlEnabled ? (
+                <button
+                    data-testid="openrtc-e2e-publish-cursor"
+                    hidden
+                    onClick={() => handleProjectedCursorMove(
+                        myMousePosition.x > 0 ? { x: -4, z: -3 } : { x: 4, z: 3 },
+                    )}
+                    type="button"
+                />
+            ) : null}
             <div className="fixed bottom-4 right-4 z-9999 pointer-events-none">
                 <div
                     aria-label={`OpenRTC ${status}: ${activeMemberCount} active cursors`}
