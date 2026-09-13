@@ -24,7 +24,9 @@ async function openPortfolioPeer(
   const isExpectedCiGraphicsLimit = (message: string) => process.env.CI === 'true'
     && /WebGL context could not be created|Error creating WebGL context/.test(message);
 
-  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('pageerror', (error) => {
+    if (!isExpectedCiGraphicsLimit(error.message)) errors.push(error.message);
+  });
   page.on('console', (message) => {
     const stage = message.text().match(/\bstage=([a-z0-9_:-]+)/i)?.[1];
     if (stage) startupStages.push(stage);
