@@ -169,3 +169,21 @@ The OpenRTC package is consumed from npm by default so this repo can be cloned
 and developed without the full workspace. Workspace-local OpenRTC SDK changes
 should be validated in `openrtc/` first, then consumed here after publish or an
 explicit temporary local override.
+
+## Hosted Actions budget policy
+
+GitHub Actions validation is optional and manually dispatched. Pull requests,
+merges, and schedules do not start validation workflows. The previous automatic
+triggers are commented out for reference. Run focused checks locally, or choose
+an Actions workflow explicitly when hosted evidence is useful.
+
+Only artifact creation and its existing publication/deployment dependencies are
+required in hosted build lanes. Do not require a manual validation job as a merge
+status: it would leave ordinary pull requests waiting indefinitely. Repositories
+without an artifact workflow do not gain a placeholder required check. Keep pull
+request/review rules, signing, artifact identity, credential isolation, and
+publication integrity safeguards in place.
+
+GitHub Pages still builds and deploys on pushes to `master`. Typecheck, unit
+tests, browser integration, and deployment smoke run only when a manual dispatch
+sets `run_validation: true`; their results do not block artifact creation.
